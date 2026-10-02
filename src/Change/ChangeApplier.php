@@ -103,8 +103,65 @@ final class ChangeApplier
         }
 
         $this->removeOrphans($graph, $current->iri);
+        $changed = $this->changedProperties($change, $current->iri, $current->graph, $graph, $minted);
 
-        return new ChangeResult(new LogisticsObject($current->iri, $graph), $change->changedProperties());
+        return new ChangeResult(new LogisticsObject($current->iri, $graph), $changed);
+    }
+
+    /**
+     * The root properties a change touched, as a notification's
+     * api:hasChangedProperty wants them: an operation on an embedded node
+     * counts for the property through which the node hangs off the object
+     * (editing the numericalValue of a grossWeight changes grossWeight).
+     *
+     * @param array<string, Iri> $minted
+     * @return list<string>
+     */
+    private function changedProperties(Change $change, Iri $root, Graph $before, Graph $after, array $minted): array
+    {
+        $rootPropertyOf = [];
+        foreach ([$before, $after] as $graph) {
+            foreach ($graph->about($root) as $triple) {
+                $object = $triple->object;
+                if (($object instanceof Iri || $object instanceof BlankNode) && LogisticsObject::isEmbeddedId($object)) {
+                    $this->assignRootProperty($graph, $object, $triple->predicate->value, $rootPropertyOf);
+                }
+            }
+        }
+        $properties = [];
+        foreach ($change->operations as $operation) {
+            $subject = $operation->subject;
+            if ($subject instanceof BlankNode) {
+                $subject = $minted[$subject->label] ?? $subject;
+            }
+            if ($subject->equals($root)) {
+                $properties[$operation->predicate->value] = true;
+            } elseif (isset($rootPropertyOf[$subject->toNTriples()])) {
+                $properties[$rootPropertyOf[$subject->toNTriples()]] = true;
+            }
+        }
+        $list = array_keys($properties);
+        sort($list, SORT_STRING);
+
+        return $list;
+    }
+
+    /**
+     * @param array<string, string> $rootPropertyOf node => root property IRI
+     */
+    private function assignRootProperty(Graph $graph, Iri|BlankNode $node, string $property, array &$rootPropertyOf): void
+    {
+        $key = $node->toNTriples();
+        if (isset($rootPropertyOf[$key])) {
+            return;
+        }
+        $rootPropertyOf[$key] = $property;
+        foreach ($graph->about($node) as $triple) {
+            $object = $triple->object;
+            if (($object instanceof Iri || $object instanceof BlankNode) && LogisticsObject::isEmbeddedId($object)) {
+                $this->assignRootProperty($graph, $object, $property, $rootPropertyOf);
+            }
+        }
     }
 
     /**

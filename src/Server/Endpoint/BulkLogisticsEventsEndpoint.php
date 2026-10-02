@@ -79,7 +79,7 @@ final class BulkLogisticsEventsEndpoint extends AbstractEndpoint
         }
 
         $document = [
-            '@context' => [...Nodes::context(), 'api:hasLogisticsObject' => ['@type' => 'xsd:anyURI'], 'api:hasLogisticsEvent' => ['@type' => 'xsd:anyURI']],
+            '@context' => Nodes::context(),
             '@id' => Namespaces::EMBEDDED . $this->services->ids->next(),
             '@type' => 'api:MultiStatusResponse',
             'api:hasTotalItems' => \count($results),
@@ -96,9 +96,9 @@ final class BulkLogisticsEventsEndpoint extends AbstractEndpoint
      */
     private function result(int $status, Iri $object, ?Iri $event, ?Error $error, \LambdaTwelve\OneRecord\Spec\ApiVersion $version): array
     {
-        $node = ['@id' => Namespaces::EMBEDDED . $this->services->ids->next(), '@type' => 'api:EventCreationResult', 'api:hasHTTPStatus' => $status, 'api:hasLogisticsObject' => $object->value];
+        $node = ['@id' => Namespaces::EMBEDDED . $this->services->ids->next(), '@type' => 'api:EventCreationResult', 'api:hasHTTPStatus' => $status, 'api:hasLogisticsObject' => Nodes::ref($object)];
         if ($event !== null) {
-            $node['api:hasLogisticsEvent'] = $event->value;
+            $node['api:hasLogisticsEvent'] = Nodes::ref($event);
         }
         if ($error !== null) {
             $node['api:hasError'] = ErrorDocument::node($error, $version);

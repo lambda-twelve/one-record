@@ -47,7 +47,7 @@ final class CreateLogisticsObjectEndpoint extends AbstractEndpoint
         unset($json['@id']);
 
         try {
-            $object = LogisticsObject::fromJsonLd($json, $iri);
+            $object = LogisticsObject::fromJsonLd($json, $iri)->withEmbeddedIds($this->services->embeddedIds);
         } catch (JsonLdException|ModelException $e) {
             throw HttpException::badRequest($e->getMessage());
         }

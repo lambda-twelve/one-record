@@ -135,6 +135,29 @@ final readonly class LogisticsObject
     }
 
     /**
+     * Give every blank node a stable embedded id (the spec's `internal:` scheme).
+     * A server does this once, when it first stores an object: from then on a
+     * change can name an embedded node, which a blank node cannot be.
+     */
+    public function withEmbeddedIds(EmbeddedIdMinter $minter): self
+    {
+        $graph = $this->graph;
+        $minted = [];
+        foreach ($graph as $triple) {
+            foreach ([$triple->subject, $triple->object] as $term) {
+                if ($term instanceof BlankNode && !isset($minted[$term->label])) {
+                    $minted[$term->label] = $minter->mint($this->iri, 'r1:' . $term->label);
+                }
+            }
+        }
+        foreach ($minted as $label => $iri) {
+            $graph = self::rename($graph, new BlankNode($label), $iri);
+        }
+
+        return $minted === [] ? $this : new self($this->iri, $graph);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function toJsonLd(?Context $context = null): array

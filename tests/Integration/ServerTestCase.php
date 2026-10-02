@@ -44,12 +44,12 @@ abstract class ServerTestCase extends TestCase
         $this->server = $this->makeServer();
     }
 
-    protected function makeServer(Decision $denial = Decision::Forbid, string $basePath = ''): InMemoryServer
+    protected function makeServer(Decision $denial = Decision::Forbid, string $basePath = '', bool $bulkEvents = false): InMemoryServer
     {
         $factory = new Psr17Factory();
         $counter = 0;
         $server = new InMemoryServer(
-            new ServerConfig(self::BASE, new Iri(self::HOLDER), $basePath, dataHolderType: Cargo::Company),
+            new ServerConfig(self::BASE, new Iri(self::HOLDER), $basePath, bulkLogisticsEvents: $bulkEvents, dataHolderType: Cargo::Company),
             new HeaderAuthenticator(),
             $this->clock,
             $this->dispatcher,
@@ -106,7 +106,7 @@ abstract class ServerTestCase extends TestCase
 
     protected function storePiece(string $id = 'piece-1', ?string $readableBy = self::PARTNER): LogisticsObject
     {
-        $piece = $this->piece($id);
+        $piece = $this->piece($id)->withEmbeddedIds($this->server->services->embeddedIds);
         $this->server->objects->create($piece, $this->clock->now());
         if ($readableBy !== null) {
             $this->server->policy->allow(new Iri($readableBy), $piece->iri, [Permission::GetLogisticsObject]);
@@ -123,6 +123,13 @@ abstract class ServerTestCase extends TestCase
     protected static function arr(mixed $value, string $message = ''): array
     {
         self::assertIsArray($value, $message);
+
+        return $value;
+    }
+
+    protected static function str(mixed $value, string $message = ''): string
+    {
+        self::assertIsString($value, $message);
 
         return $value;
     }

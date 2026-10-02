@@ -45,7 +45,7 @@ final class DataHolder
      */
     public function create(LogisticsObject $object): StoredObject
     {
-        $stored = $this->services->objects->create($object, $this->services->clock->now());
+        $stored = $this->services->objects->create($object->withEmbeddedIds($this->services->embeddedIds), $this->services->clock->now());
         $this->services->dispatcher->dispatch(new LogisticsObjectCreated($stored, $this->services->config->dataHolder));
         (new Fanout($this->services))->logisticsObjectCreated($stored);
 
