@@ -561,7 +561,7 @@ final class OneRecordClient
         if ($value === '') {
             return null;
         }
-        $parsed = DateTimeImmutable::createFromFormat(DATE_RFC7231, $value, new DateTimeZone('UTC'));
+        $parsed = DateTimeImmutable::createFromFormat('D, d M Y H:i:s \G\M\T', $value, new DateTimeZone('UTC'));
 
         return $parsed === false ? null : $parsed;
     }
