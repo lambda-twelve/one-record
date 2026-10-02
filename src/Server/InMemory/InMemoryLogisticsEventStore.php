@@ -6,6 +6,7 @@ namespace LambdaTwelve\OneRecord\Server\InMemory;
 
 use DateTimeImmutable;
 use LambdaTwelve\OneRecord\Model\LogisticsEvent;
+use LambdaTwelve\OneRecord\Rdf\Graph;
 use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Server\Spi\EventQuery;
 use LambdaTwelve\OneRecord\Server\Spi\LogisticsEventStore;
@@ -25,7 +26,7 @@ final class InMemoryLogisticsEventStore implements LogisticsEventStore
             // Uniqueness at the scope get() looks up: the whole server, not one object's bucket (AR-022).
             throw StoreException::alreadyExists($event->iri);
         }
-        $this->events[$event->logisticsObject->value][$event->iri->value] = $event;
+        $this->events[$event->logisticsObject->value][$event->iri->value] = self::snapshot($event);
         $current = $this->lastModified[$event->logisticsObject->value] ?? null;
         $this->lastModified[$event->logisticsObject->value] = $current === null || $event->created > $current ? $event->created : $current;
     }
@@ -39,11 +40,19 @@ final class InMemoryLogisticsEventStore implements LogisticsEventStore
     {
         foreach ($this->events as $events) {
             if (isset($events[$eventIri->value])) {
-                return $events[$eventIri->value];
+                return self::snapshot($events[$eventIri->value]);
             }
         }
 
         return null;
+    }
+
+    /**
+     * A caller editing the event it passed in or read back must not edit the log (R2-005).
+     */
+    private static function snapshot(LogisticsEvent $event): LogisticsEvent
+    {
+        return new LogisticsEvent($event->iri, $event->logisticsObject, new Graph($event->graph), $event->created);
     }
 
     public function query(Iri $logisticsObject, EventQuery $query): array
@@ -82,7 +91,7 @@ final class InMemoryLogisticsEventStore implements LogisticsEventStore
             return str_starts_with($query->sort, 'DESC') ? -$cmp : $cmp;
         });
 
-        return \array_slice($events, $query->skip, $query->limit);
+        return array_map(self::snapshot(...), \array_slice($events, $query->skip, $query->limit));
     }
 
     public function lastModified(Iri $logisticsObject): ?DateTimeImmutable

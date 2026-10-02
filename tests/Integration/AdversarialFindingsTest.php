@@ -333,4 +333,27 @@ final class AdversarialFindingsTest extends ServerTestCase
         self::assertSame('api:Error', self::json($response)['@type']);
         self::assertSame(1, $unit->rolledBack, 'the unit of work unwound before the answer');
     }
+
+    public function testR2007NegotiationConsidersEveryVersionThisServerServes(): void
+    {
+        $only22 = $this->makeServerSpeaking([\LambdaTwelve\OneRecord\Spec\ApiVersion::V2_2_0]);
+        $only23 = $this->makeServerSpeaking([\LambdaTwelve\OneRecord\Spec\ApiVersion::V2_3_0]);
+        $both = $this->server;
+        $get = fn(\LambdaTwelve\OneRecord\Server\InMemory\InMemoryServer $s, string $accept): \Psr\Http\Message\ResponseInterface => $s->handler->handle(new \Nyholm\Psr7\ServerRequest('GET', self::BASE . '/', ['Accept' => $accept, 'X-Test-Agent' => self::HOLDER]));
+
+        // A preferred unsupported version does not veto the supported alternative.
+        foreach (['application/ld+json;version=2.3.0;q=1, application/ld+json;version=2.2.0;q=0.9', 'application/ld+json;version=9.9.9;q=1, application/ld+json;version=2.2.0;q=0.9', 'application/ld+json;version=2.2.0;q=0.9, application/ld+json;version=2.3.0;q=1'] as $accept) {
+            $response = $get($only22, $accept);
+            self::assertSame(200, $response->getStatusCode(), $accept);
+            self::assertSame('application/ld+json; version=2.2.0', $response->getHeaderLine('Content-Type'), $accept);
+        }
+        // An explicitly excluded version is not revived by a generic range.
+        self::assertSame(406, $get($only22, 'application/ld+json;version=2.2.0;q=0, application/ld+json;q=1')->getStatusCode());
+        // The dual-version server follows the client's preference, and specificity beats order.
+        self::assertSame('application/ld+json; version=2.2.0', $get($both, 'application/ld+json;version=2.3.0;q=0.5, application/ld+json;version=2.2.0;q=1')->getHeaderLine('Content-Type'));
+        self::assertSame('application/ld+json; version=2.3.0', $get($both, 'application/ld+json;q=1')->getHeaderLine('Content-Type'), 'no version named: the highest');
+        self::assertSame('application/ld+json; version=2.3.0', $get($both, 'application/ld+json;version=2.2.0;q=0, application/ld+json;q=1')->getHeaderLine('Content-Type'), '2.2 excluded, 2.3 still acceptable');
+        self::assertSame(406, $get($only23, 'application/ld+json;version=2.2.0')->getStatusCode());
+        self::assertSame(406, $get($both, 'text/turtle')->getStatusCode());
+    }
 }

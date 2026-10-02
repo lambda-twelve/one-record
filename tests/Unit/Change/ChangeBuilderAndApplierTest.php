@@ -377,4 +377,48 @@ final class ChangeBuilderAndApplierTest extends TestCase
             self::assertSame([Cargo::grossWeight], $result->changedProperties);
         }
     }
+
+    public function testR2011ASharedEmbeddedNodeStaysOneNodeThroughAChange(): void
+    {
+        $iri = new Iri('https://1r.example.com/logistics-objects/p1');
+        $from = ObjectBuilder::of(Cargo::Piece)->set(Cargo::goodsDescription, 'Books')->build($iri);
+        $d = new Iri('internal:d');
+        $v = new Iri('internal:v');
+        $to = $from->withGraph(new Graph([
+            ...$from->graph,
+            new Triple($iri, new Iri(Cargo::dimensions), $d),
+            new Triple($d, new Iri(Graph::RDF_TYPE), new Iri(Cargo::Dimensions)),
+            new Triple($d, new Iri(Cargo::width), $v),
+            new Triple($d, new Iri(Cargo::height), $v),
+            new Triple($v, new Iri(Graph::RDF_TYPE), new Iri(Cargo::Value)),
+            new Triple($v, new Iri(Cargo::numericalValue), Literal::integer(1)),
+        ]));
+
+        $change = (new ChangeBuilder())->diff($from, $to, 1);
+        self::assertNotNull($change);
+        $labels = [];
+        foreach ($change->operations as $operation) {
+            if ($operation->object->isBlankNode()) {
+                $labels[$operation->predicate->value] = $operation->object->value;
+            }
+        }
+        self::assertSame($labels[Cargo::width], $labels[Cargo::height], 'one blank node for the shared Value');
+
+        $result = (new ChangeApplier())->apply($from, 1, $change);
+        $dims = $result->object->graph->firstObject($iri, Cargo::dimensions);
+        self::assertInstanceOf(Iri::class, $dims);
+        $width = $result->object->graph->firstObject($dims, Cargo::width);
+        $height = $result->object->graph->firstObject($dims, Cargo::height);
+        self::assertNotNull($width);
+        self::assertNotNull($height);
+        self::assertTrue($width->equals($height), 'width and height still point at the same node');
+        self::assertCount(1, array_filter($result->object->graph->subjects(), static fn($s): bool => $s instanceof Iri && str_starts_with($s->value, 'internal:') && $result->object->graph->firstObject($s, Cargo::numericalValue) !== null), 'exactly one Value node exists');
+
+        // And removing the shared node deletes its triples once, the links twice.
+        $back = (new ChangeBuilder())->diff($result->object, $from->withGraph(new Graph([...$from->graph])), 2);
+        self::assertNotNull($back);
+        $deletesOfValue = array_filter($back->operations, static fn($o): bool => $o->predicate->value === Cargo::numericalValue);
+        self::assertCount(1, $deletesOfValue);
+        self::assertTrue((new Comparer())->isomorphic((new ChangeApplier())->apply($result->object, 2, $back)->object->graph, $from->graph));
+    }
 }

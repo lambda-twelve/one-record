@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace LambdaTwelve\OneRecord\Server\InMemory;
 
+use LambdaTwelve\OneRecord\Api\Notification;
+use LambdaTwelve\OneRecord\Rdf\Graph;
 use LambdaTwelve\OneRecord\Server\Spi\NotificationOutbox;
 use LambdaTwelve\OneRecord\Server\Spi\OutboundNotification;
 
@@ -14,6 +16,8 @@ final class InMemoryNotificationOutbox implements NotificationOutbox
 
     public function enqueue(OutboundNotification $notification): void
     {
+        // The queued body is what was true when it was queued, whatever the caller does with its object afterwards (R2-005).
+        $notification = self::snapshot($notification);
         $this->queue[] = $notification;
     }
 
@@ -36,5 +40,16 @@ final class InMemoryNotificationOutbox implements NotificationOutbox
         $this->queue = [];
 
         return $queue;
+    }
+
+    private static function snapshot(OutboundNotification $outbound): OutboundNotification
+    {
+        $n = $outbound->notification;
+        if ($n->body === null) {
+            return $outbound;
+        }
+        $copy = new Notification($n->eventType, $n->logisticsObject, $n->logisticsObjectType, $n->triggeredBy, $n->changedProperties, $n->logisticsEvents, $n->body->withGraph(new Graph($n->body->graph)));
+
+        return new OutboundNotification($outbound->recipient, $copy, $outbound->createdAt, $outbound->id);
     }
 }

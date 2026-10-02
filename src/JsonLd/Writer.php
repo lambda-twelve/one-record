@@ -90,13 +90,19 @@ final class Writer
         }
 
         $compactKeys = [];
-        foreach (array_keys($properties) as $predicate) {
-            $compactKeys[$context->compactIri($predicate)] = $predicate;
+        foreach ($properties as $predicate => $values) {
+            // A term alias is used only when its coercion fits every value; otherwise the values would
+            // read back as something else (a string as an IRI, R2-002) and the plain compact IRI is written.
+            $term = $context->compactIri($predicate);
+            $coercion = $context->coercionOfTerm($term);
+            if ($coercion !== null && !self::valuesFit($values, $coercion)) {
+                $term = $context->compactIri($predicate, true, false);
+                $coercion = $context->coercionOfTerm($term);
+            }
+            $compactKeys[$term] = [$predicate, $coercion];
         }
         ksort($compactKeys, SORT_STRING);
-        foreach ($compactKeys as $key => $predicate) {
-            // The key written is the term; its own definition decides the coercion, as on reading.
-            $coercion = $context->coercionOfTerm($context->compactIri($predicate));
+        foreach ($compactKeys as $key => [$predicate, $coercion]) {
             $values = $properties[$predicate];
             usort($values, static fn(Term $a, Term $b): int => strcmp($a->toNTriples(), $b->toNTriples()));
             $written = array_map(fn(Term $term): mixed => $this->value($graph, $term, $context, $coercion), $values);
@@ -104,6 +110,26 @@ final class Writer
         }
 
         return $out;
+    }
+
+    /**
+     * @param list<Term> $values
+     */
+    private static function valuesFit(array $values, string $coercion): bool
+    {
+        foreach ($values as $value) {
+            if ($coercion === Context::JSON_LD_ID) {
+                if ($value instanceof Literal) {
+                    return false;
+                }
+                continue;
+            }
+            if (!$value instanceof Literal || $value->language !== null || $value->datatype !== $coercion) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function value(Graph $graph, Term $term, Context $context, ?string $coercion): mixed

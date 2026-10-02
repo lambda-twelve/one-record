@@ -264,17 +264,19 @@ final readonly class Context
      * used; otherwise "Piece" would be written where a reader sees a relative
      * reference (AR-007).
      */
-    public function compactIri(string $iri, bool $vocabRelative = true): string
+    public function compactIri(string $iri, bool $vocabRelative = true, bool $useTerms = true): string
     {
-        if ($vocabRelative) {
+        if ($vocabRelative && $useTerms) {
             foreach ($this->terms as $term => $definition) {
                 if ($definition['id'] === $iri) {
                     return $term;
                 }
             }
         }
+        // A bare prefix name is a term alias for the namespace, usable for keys and types only;
+        // as a node identifier it would read as a relative IRI (R2-002).
         $exact = array_search($iri, $this->prefixes, true);
-        if ($exact !== false && $exact !== '') {
+        if ($vocabRelative && $exact !== false && $exact !== '') {
             return $exact;
         }
         if ($vocabRelative && $this->vocab !== null && str_starts_with($iri, $this->vocab)) {

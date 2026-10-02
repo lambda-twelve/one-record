@@ -22,17 +22,68 @@ final class ContentNegotiation
 
     public function negotiate(ServerRequestInterface $request): Negotiated
     {
-        $accept = $request->getHeaderLine('Accept');
-        [$acceptable, $requested] = $this->parseAccept($accept);
-        if (!$acceptable) {
+        $accept = trim($request->getHeaderLine('Accept'));
+        if ($accept === '') {
+            return new Negotiated($this->config->highestApiVersion(), $this->language($request), false);
+        }
+        // RFC 9110 §12.5.1 applied per representation: for each version this server serves, the
+        // most specific range that matches it (type, then version parameter) decides its quality;
+        // then the best available representation wins. A range naming an unknown version simply
+        // matches nothing, so it cannot veto a representation another range accepts (R2-007).
+        $ranges = [];
+        $unknownVersion = null;
+        foreach (explode(',', $accept) as $range) {
+            [$type, $parameters] = self::splitMediaType($range);
+            $specificity = match ($type) {
+                self::JSON_LD => 3,
+                'application/json' => 2,
+                'application/*' => 1,
+                '*/*' => 0,
+                default => -1,
+            };
+            if ($specificity < 0) {
+                continue;
+            }
+            $version = null;
+            if (isset($parameters['version'])) {
+                $version = ApiVersion::tryFromString($parameters['version']);
+                if ($version === null || !$this->config->supports($version)) {
+                    $unknownVersion ??= $parameters['version'];
+                    continue;
+                }
+            }
+            $ranges[] = ['specificity' => $specificity, 'version' => $version, 'q' => isset($parameters['q']) && is_numeric($parameters['q']) ? (float) $parameters['q'] : 1.0];
+        }
+        if ($ranges === [] && $unknownVersion === null) {
             throw HttpException::notAcceptable(\sprintf('This server answers in %s only.', self::JSON_LD));
         }
-        $version = $requested ?? $this->config->highestApiVersion();
-        if (!$this->config->supports($version)) {
-            throw HttpException::notAcceptable(\sprintf('API version %s is not supported; this server speaks %s.', $version->value, implode(', ', array_map(static fn(ApiVersion $v): string => $v->value, $this->config->apiVersions))));
+        $best = null;
+        foreach ($this->config->apiVersions as $candidate) {
+            $match = null;
+            foreach ($ranges as $range) {
+                if ($range['version'] !== null && $range['version'] !== $candidate) {
+                    continue;
+                }
+                $score = $range['specificity'] * 2 + ($range['version'] === null ? 0 : 1);
+                if ($match === null || $score > $match['score']) {
+                    $match = ['score' => $score, 'q' => $range['q'], 'explicit' => $range['version'] !== null];
+                }
+            }
+            if ($match === null || $match['q'] <= 0) {
+                continue;
+            }
+            // Versions are listed highest first, so on equal quality the higher one stays.
+            if ($best === null || $match['q'] > $best['q']) {
+                $best = ['version' => $candidate, 'q' => $match['q'], 'explicit' => $match['explicit']];
+            }
+        }
+        if ($best === null) {
+            throw $unknownVersion !== null
+                ? HttpException::notAcceptable(\sprintf('API version %s is not supported; this server speaks %s.', $unknownVersion, implode(', ', array_map(static fn(ApiVersion $v): string => $v->value, $this->config->apiVersions))))
+                : HttpException::notAcceptable(\sprintf('This server answers in %s only.', self::JSON_LD));
         }
 
-        return new Negotiated($version, $this->language($request), $requested !== null);
+        return new Negotiated($best['version'], $this->language($request), $best['explicit']);
     }
 
     /**
@@ -62,45 +113,6 @@ final class ContentNegotiation
         return $version ?? $negotiated->version;
     }
 
-    /**
-     * @return array{bool, ?ApiVersion} whether JSON-LD is acceptable, and the version asked for
-     */
-    private function parseAccept(string $accept): array
-    {
-        if (trim($accept) === '') {
-            return [true, null];
-        }
-        // RFC 9110 §12.5.1: the most specific matching range decides, and q=0 there means
-        // "not acceptable" even if a wildcard elsewhere would allow it (AR-020).
-        $bestSpecificity = -1;
-        $bestQ = 0.0;
-        $version = null;
-        foreach (explode(',', $accept) as $range) {
-            [$type, $parameters] = self::splitMediaType($range);
-            $q = isset($parameters['q']) && is_numeric($parameters['q']) ? (float) $parameters['q'] : 1.0;
-            $specificity = match ($type) {
-                self::JSON_LD => 3,
-                'application/json' => 2,
-                'application/*' => 1,
-                '*/*' => 0,
-                default => -1,
-            };
-            if ($specificity < 0 || $specificity < $bestSpecificity || ($specificity === $bestSpecificity && $q <= $bestQ)) {
-                continue;
-            }
-            $bestSpecificity = $specificity;
-            $bestQ = $q;
-            $version = null;
-            if ($q > 0 && isset($parameters['version'])) {
-                $version = ApiVersion::tryFromString($parameters['version']);
-                if ($version === null) {
-                    throw HttpException::notAcceptable(\sprintf('Unknown API version "%s" in Accept.', $parameters['version']));
-                }
-            }
-        }
-
-        return [$bestSpecificity >= 0 && $bestQ > 0, $version];
-    }
 
     private function language(ServerRequestInterface $request): string
     {

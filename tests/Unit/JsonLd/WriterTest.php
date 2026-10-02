@@ -192,4 +192,28 @@ final class WriterTest extends TestCase
         $doc = JsonLd::expand(['https://example/p' => 'x']);
         self::assertArrayNotHasKey('@id', (new Writer())->write($doc->graph, $doc->root, $doc->context));
     }
+
+    public function testR2002AnAliasIsUsedOnlyWhereItsCoercionFitsTheValue(): void
+    {
+        $context = ['@context' => ['cargo' => 'https://onerecord.iata.org/ns/cargo#', 'link' => ['@id' => 'cargo:goodsDescription', '@type' => '@id']]];
+        $doc = JsonLd::expand($context + ['@id' => 'https://example/p', 'cargo:goodsDescription' => 'https://example/text']);
+        $written = (new Writer())->write($doc->graph, $doc->root, $doc->context);
+        self::assertArrayNotHasKey('link', $written, 'the @id-coerced alias would turn the string into an IRI');
+        self::assertSame('https://example/text', $written['cargo:goodsDescription']);
+        $back = JsonLd::expand($written)->graph->firstObject(new Iri('https://example/p'), 'https://onerecord.iata.org/ns/cargo#goodsDescription');
+        self::assertInstanceOf(Literal::class, $back);
+        self::assertSame('https://example/text', $back->lexical);
+
+        // With an IRI value the alias fits and is used.
+        $doc = JsonLd::expand($context + ['@id' => 'https://example/p', 'link' => 'https://example/other']);
+        $written = (new Writer())->write($doc->graph, $doc->root, $doc->context);
+        self::assertSame('https://example/other', $written['link']);
+        self::assertInstanceOf(Iri::class, JsonLd::expand($written)->graph->firstObject(new Iri('https://example/p'), 'https://onerecord.iata.org/ns/cargo#goodsDescription'));
+
+        // A node whose IRI is exactly a prefix namespace is never written as the bare prefix.
+        $doc = JsonLd::expand(['@context' => ['cargo' => 'https://onerecord.iata.org/ns/cargo#'], '@id' => 'https://onerecord.iata.org/ns/cargo#', 'cargo:goodsDescription' => 'x']);
+        $written = (new Writer())->write($doc->graph, $doc->root, $doc->context);
+        self::assertSame('https://onerecord.iata.org/ns/cargo#', $written['@id']);
+        self::assertSame('https://onerecord.iata.org/ns/cargo#', JsonLd::expand($written)->rootIri()?->value);
+    }
 }

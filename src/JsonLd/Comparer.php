@@ -223,19 +223,15 @@ final class Comparer
             return [];
         }
 
-        // Colour refinement first; then, while ties remain, individualise one node of the
-        // smallest tie class and refine again. Breaking every tie by original label
-        // independently is not sound: two symmetric subtrees can get mirrored choices and
-        // the labels no longer agree between isomorphic graphs (AR-010). Individualising
-        // one node and letting refinement propagate the choice keeps every later choice
-        // consistent with it; for truly automorphic nodes the choice does not matter.
-        $hashes = array_fill_keys(array_keys($blanks), '');
-        $hashes = $this->refine($graph, $blanks, $hashes);
-        $guard = 0;
-        while (($tie = $this->smallestTie($hashes)) !== null && $guard++ < \count($blanks)) {
-            $hashes[$tie] = hash('sha256', 'individual ' . $hashes[$tie]);
-            $hashes = $this->refine($graph, $blanks, $hashes);
-        }
+        // Colour refinement first. Nodes left tied are not necessarily interchangeable (two
+        // cycles of different length can share a colour), so no single choice among them is
+        // canonical. Every choice is explored: individualise each member of the smallest tie
+        // class in turn, refine, recurse, and keep the branch whose relabelled graph sorts
+        // first. That is a canonical form, label-free by construction (AR-010, R2-001); the
+        // cost is exponential in symmetry, hence the budget.
+        $hashes = $this->refine($graph, $blanks, array_fill_keys(array_keys($blanks), ''));
+        $budget = self::SEARCH_BUDGET;
+        [, $hashes] = $this->search($graph, $blanks, $hashes, $budget);
 
         $labels = [];
         foreach ($hashes as $label => $hash) {
@@ -243,6 +239,85 @@ final class Comparer
         }
 
         return $labels;
+    }
+
+    /** Leaves of the individualisation tree the comparer will visit before giving up. */
+    private const int SEARCH_BUDGET = 20000;
+
+    /**
+     * @param array<string, BlankNode> $blanks
+     * @param array<string, string> $hashes a stable colouring
+     * @return array{string, array<string, string>} the smallest serialisation reachable and the colouring that gives it
+     */
+    private function search(Graph $graph, array $blanks, array $hashes, int &$budget): array
+    {
+        $tie = $this->smallestTieClass($hashes);
+        if ($tie === []) {
+            if (--$budget < 0) {
+                throw new ComparisonBudgetExceeded(\sprintf('The graph is too symmetric to canonicalise within %d steps.', self::SEARCH_BUDGET));
+            }
+
+            return [$this->serialise($graph, $hashes), $hashes];
+        }
+        $best = null;
+        foreach ($tie as $member) {
+            $branch = $hashes;
+            // The same mark for every member: the branches must stay comparable with the other graph's.
+            $branch[$member] = hash('sha256', 'individual ' . $branch[$member]);
+            $candidate = $this->search($graph, $blanks, $this->refine($graph, $blanks, $branch), $budget);
+            if ($best === null || strcmp($candidate[0], $best[0]) < 0) {
+                $best = $candidate;
+            }
+        }
+
+        return $best;
+    }
+
+    /**
+     * @param array<string, string> $hashes
+     */
+    private function serialise(Graph $graph, array $hashes): string
+    {
+        $lines = [];
+        foreach ($graph as $triple) {
+            $s = $triple->subject instanceof BlankNode ? '_:' . $hashes[$triple->subject->label] : $triple->subject->toNTriples();
+            $o = $triple->object instanceof BlankNode ? '_:' . $hashes[$triple->object->label] : $triple->object->toNTriples();
+            $lines[] = $s . ' ' . $triple->predicate->toNTriples() . ' ' . $o;
+        }
+        sort($lines, SORT_STRING);
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * The members of the smallest class of tied nodes (ties broken by hash, so
+     * both graphs pick the same class), or [] when every node is distinct.
+     *
+     * @param array<string, string> $hashes
+     * @return list<string>
+     */
+    private function smallestTieClass(array $hashes): array
+    {
+        $groups = [];
+        foreach ($hashes as $label => $hash) {
+            $groups[$hash][] = $label;
+        }
+        $best = null;
+        foreach ($groups as $hash => $members) {
+            if (\count($members) < 2) {
+                continue;
+            }
+            if ($best === null || \count($members) < \count($groups[$best]) || (\count($members) === \count($groups[$best]) && strcmp((string) $hash, $best) < 0)) {
+                $best = (string) $hash;
+            }
+        }
+        if ($best === null) {
+            return [];
+        }
+        $members = $groups[$best];
+        sort($members, SORT_STRING);
+
+        return $members;
     }
 
     /**
@@ -281,35 +356,6 @@ final class Comparer
         return $hashes;
     }
 
-    /**
-     * One member of the smallest class of tied nodes (ties broken by hash, so
-     * both graphs pick the same class), or null when every node is distinct.
-     *
-     * @param array<string, string> $hashes
-     */
-    private function smallestTie(array $hashes): ?string
-    {
-        $groups = [];
-        foreach ($hashes as $label => $hash) {
-            $groups[$hash][] = $label;
-        }
-        $best = null;
-        foreach ($groups as $hash => $members) {
-            if (\count($members) < 2) {
-                continue;
-            }
-            if ($best === null || \count($members) < \count($groups[$best]) || (\count($members) === \count($groups[$best]) && strcmp((string) $hash, $best) < 0)) {
-                $best = (string) $hash;
-            }
-        }
-        if ($best === null) {
-            return null;
-        }
-        $members = $groups[$best];
-        sort($members, SORT_STRING);
-
-        return $members[0];
-    }
 
     /**
      * @param array<string, string> $hashes

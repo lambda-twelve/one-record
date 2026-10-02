@@ -64,4 +64,19 @@ abstract class NotificationOutboxContract extends TestCase
         self::assertSame(self::OBJECT . '/logistics-events/e1', $pending[1]->notification->logisticsEvents[0]->value);
         self::assertSame('api:Notification', $pending[1]->notification->toJsonLd()['@type'], 'the document is ready to send');
     }
+
+    public function testQueuedBodiesAreSnapshots(): void
+    {
+        $outbox = $this->createOutbox();
+        $piece = \LambdaTwelve\OneRecord\Model\Builder\ObjectBuilder::of(Cargo::Piece)->set(Cargo::goodsDescription, 'SECRET')->build(new Iri(self::OBJECT));
+        $outbox->enqueue(new OutboundNotification(new Iri(self::PARTNER), new Notification(NotificationEventType::LogisticsObjectCreated, $piece->iri, Cargo::Piece, null, [], [], $piece), new DateTimeImmutable('2026-10-02T12:00:00Z'), 'n-1'));
+
+        // What the caller does with its object afterwards does not change what will be delivered (R2-005).
+        $piece->graph->add(new \LambdaTwelve\OneRecord\Rdf\Triple($piece->iri, new Iri(Cargo::goodsDescription), \LambdaTwelve\OneRecord\Rdf\Literal::string('after-queue')));
+        $pending = $this->pending($outbox);
+        self::assertCount(1, $pending);
+        $json = json_encode($pending[0]->notification->toJsonLd(), JSON_THROW_ON_ERROR);
+        self::assertStringContainsString('SECRET', $json);
+        self::assertStringNotContainsString('after-queue', $json);
+    }
 }

@@ -36,6 +36,12 @@ final class ChangeBuilder
 
     private ?Iri $root = null;
 
+    /** @var array<string, BlankNode> source embedded node => the blank node the change introduces for it */
+    private array $introduced = [];
+
+    /** @var array<string, true> source embedded nodes whose subtree deletion was already emitted */
+    private array $removed = [];
+
     public function __construct(
         private readonly ?Vocabulary $vocabulary = null,
         private readonly ?Comparer $comparer = null,
@@ -59,6 +65,8 @@ final class ChangeBuilder
         }
 
         $this->blankCounter = 0;
+        $this->introduced = [];
+        $this->removed = [];
         $this->root = $from->iri;
         $operations = $this->diffNode($from->graph, $to->graph, $from->iri, $to->iri, $from->iri);
         if ($operations === []) {
@@ -207,7 +215,8 @@ final class ChangeBuilder
     {
         $comparer = $this->comparer ?? new Comparer();
         $sub = new Graph();
-        $this->collect($graph, $node, $sub, []);
+        $seen = [];
+        $this->collect($graph, $node, $sub, $seen);
         // Re-root at a fixed blank label so identical content under different ids hashes the same.
         $rerooted = new Graph();
         $marker = new BlankNode('root');
@@ -225,7 +234,7 @@ final class ChangeBuilder
     /**
      * @param array<string, true> $seen
      */
-    private function collect(Graph $graph, Iri|BlankNode $node, Graph $into, array $seen): void
+    private function collect(Graph $graph, Iri|BlankNode $node, Graph $into, array &$seen): void
     {
         $seen[$node->toNTriples()] = true;
         foreach ($graph->about($node) as $triple) {
@@ -255,6 +264,12 @@ final class ChangeBuilder
     private function deleteSubtree(Graph $graph, Iri|BlankNode $subject, Iri $predicate, Iri|BlankNode $node): array
     {
         $operations = [Operation::delete($subject, $predicate, new OperationObject($this->datatypeForNode($graph, $predicate, $node), $node instanceof Iri ? $node->value : $node->toNTriples()))];
+        // The link goes each time; the node's own triples go once (R2-011).
+        $key = $node->toNTriples();
+        if (isset($this->removed[$key])) {
+            return $operations;
+        }
+        $this->removed[$key] = true;
         foreach ($graph->about($node) as $triple) {
             if ($triple->predicate->value === Graph::RDF_TYPE) {
                 continue;
@@ -277,7 +292,12 @@ final class ChangeBuilder
      */
     private function addSubtree(Graph $graph, Iri|BlankNode $subject, Iri $predicate, Iri|BlankNode $node): array
     {
-        $blank = new BlankNode('b' . $this->blankCounter++);
+        // A node reached through two links is one node (R2-011): introduce it once, link it twice.
+        $key = $node->toNTriples();
+        if (isset($this->introduced[$key])) {
+            return [Operation::add($subject, $predicate, new OperationObject($this->datatypeForNode($graph, $predicate, $node), $this->introduced[$key]->toNTriples()))];
+        }
+        $blank = $this->introduced[$key] = new BlankNode('b' . $this->blankCounter++);
         $operations = [Operation::add($subject, $predicate, new OperationObject($this->datatypeForNode($graph, $predicate, $node), $blank->toNTriples()))];
         foreach ($graph->about($node) as $triple) {
             if ($triple->predicate->value === Graph::RDF_TYPE) {

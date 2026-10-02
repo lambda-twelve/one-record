@@ -132,4 +132,21 @@ abstract class LogisticsEventStoreContract extends TestCase
         self::assertNull($store->lastModified(new Iri(self::OBJECT)));
         self::assertSame(['c'], self::ids($store->query(new Iri(self::OTHER), EventQuery::all())));
     }
+
+    public function testStoredEventsAreSnapshots(): void
+    {
+        $store = $this->createStore();
+        $event = $this->event('a', 'DEP', '2026-10-02T10:00:00Z', '2026-10-02T12:00:00Z');
+        $store->append($event);
+
+        // Editing the event handed in, or the one read back, must not edit the log (R2-005).
+        $event->graph->add(new \LambdaTwelve\OneRecord\Rdf\Triple($event->iri, new Iri(Cargo::eventName), \LambdaTwelve\OneRecord\Rdf\Literal::string('after-write')));
+        $read = $store->get($event->iri);
+        self::assertNotNull($read);
+        self::assertCount(1, $read->graph->objects($event->iri, Cargo::eventName));
+        $read->graph->add(new \LambdaTwelve\OneRecord\Rdf\Triple($event->iri, new Iri(Cargo::eventName), \LambdaTwelve\OneRecord\Rdf\Literal::string('after-read')));
+        self::assertCount(1, $store->get($event->iri)?->graph->objects($event->iri, Cargo::eventName) ?? []);
+        $listed = $store->query(new Iri(self::OBJECT), EventQuery::all());
+        self::assertCount(1, $listed[0]->graph->objects($event->iri, Cargo::eventName));
+    }
 }

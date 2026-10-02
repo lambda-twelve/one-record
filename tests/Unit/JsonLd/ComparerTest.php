@@ -225,4 +225,54 @@ final class ComparerTest extends TestCase
         self::assertSame('not a number', $comparer->normaliseLiteral($decimal('not a number'))->lexical, 'a non-decimal lexical is left alone');
         self::assertTrue($comparer->normaliseLiteral(new Literal('2.0E1', Literal::XSD_DOUBLE))->equals($comparer->normaliseLiteral(new Literal('20.0', Literal::XSD_DOUBLE))));
     }
+
+    public function testR2001TiedNonAutomorphicNodesAreCanonicalisedBySearch(): void
+    {
+        // r --p--> each of seven blanks; q-cycles a→b→c→a and d→e→f→g→d. Refinement leaves all
+        // seven in one colour class although a 3-cycle node and a 4-cycle node are not interchangeable.
+        $build = static function (string $a, string $b, string $c, string $d, string $e, string $f, string $g): Graph {
+            $names = [$a, $b, $c, $d, $e, $f, $g];
+            $graph = new Graph();
+            $r = new Iri('https://x.example/r');
+            $p = new Iri('https://x.example/p');
+            $q = new Iri('https://x.example/q');
+            foreach ($names as $n) {
+                $graph->add(new Triple($r, $p, new BlankNode($n)));
+            }
+            foreach ([[$a, $b], [$b, $c], [$c, $a], [$d, $e], [$e, $f], [$f, $g], [$g, $d]] as [$from, $to]) {
+                $graph->add(new Triple(new BlankNode($from), $q, new BlankNode($to)));
+            }
+
+            return $graph;
+        };
+        $comparer = new Comparer();
+        $original = $build('a', 'b', 'c', 'd', 'e', 'f', 'g');
+        self::assertTrue($comparer->isomorphic($original, $build('d', 'b', 'c', 'a', 'e', 'f', 'g')), 'a and d swapped: a bijection, so isomorphic');
+        self::assertTrue($comparer->isomorphic($original, $build('g', 'f', 'e', 'c', 'b', 'a', 'd')), 'an arbitrary relabelling');
+        self::assertTrue($comparer->compare($original, $build('zz', 'yy', 'xx', 'ww', 'vv', 'uu', 'tt'))->isEqual());
+
+        // Control: two 3-cycles and a lone node are a different graph with the same degree profile at r.
+        $control = new Graph();
+        $r = new Iri('https://x.example/r');
+        $p = new Iri('https://x.example/p');
+        $q = new Iri('https://x.example/q');
+        foreach (['a', 'b', 'c', 'd', 'e', 'f', 'g'] as $n) {
+            $control->add(new Triple($r, $p, new BlankNode($n)));
+        }
+        foreach ([['a', 'b'], ['b', 'c'], ['c', 'a'], ['d', 'e'], ['e', 'f'], ['f', 'd'], ['g', 'g']] as [$from, $to]) {
+            $control->add(new Triple(new BlankNode($from), $q, new BlankNode($to)));
+        }
+        self::assertFalse($comparer->isomorphic($original, $control));
+    }
+
+    public function testR2001TooMuchSymmetryIsReportedNotGuessed(): void
+    {
+        // Twenty isolated identical blank nodes: 20! leaves, far beyond any budget.
+        $graph = new Graph();
+        for ($i = 0; $i < 20; $i++) {
+            $graph->add(new Triple(new BlankNode('n' . $i), new Iri('https://x.example/q'), Literal::string('x')));
+        }
+        $this->expectException(\LambdaTwelve\OneRecord\JsonLd\ComparisonBudgetExceeded::class);
+        (new Comparer())->canonical($graph);
+    }
 }
