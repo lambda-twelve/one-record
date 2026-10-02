@@ -1,0 +1,9 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+// Regenerates src/Vocabulary/Generated from IATA's ontologies at pinned commits.
+// Implemented in roadmap phase 1.
+fwrite(STDERR, "bin/generate-vocabulary is not implemented yet.\n");
+exit(1);

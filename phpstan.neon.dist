@@ -1,0 +1,27 @@
+includes:
+    - vendor/phpstan/phpstan-strict-rules/rules.neon
+    - vendor/phpstan/phpstan-phpunit/extension.neon
+    - vendor/phpstan/phpstan-phpunit/rules.neon
+
+parameters:
+    level: max
+    paths:
+        - src
+        - tests
+        - tools
+        - bin
+        - docs/examples
+    excludePaths:
+        # Generated constants: large, mechanical, checked by the regeneration diff instead.
+        - src/Vocabulary/Generated/*
+    treatPhpDocTypesAsCertain: false
+    reportUnmatchedIgnoredErrors: true
+
+rules:
+    # The SDK must stay framework-free: src/ may only depend on itself, PSR interfaces and PHP.
+    - LambdaTwelve\OneRecord\Tools\PhpStan\SdkBoundaryRule
+
+services:
+    -
+        class: LambdaTwelve\OneRecord\Tools\PhpStan\SdkBoundaryRule
+        tags: [phpstan.rules.rule]

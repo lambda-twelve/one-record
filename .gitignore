@@ -1,0 +1,11 @@
+ref/
+/vendor/
+composer.lock
+.phpunit.cache/
+.php-cs-fixer.cache
+/site/
+/node_modules/
+/tests/Compliance/newman/
+# Local assistant/tooling files: never part of the repository.
+/CLAUDE.md
+/.claude/

@@ -1,0 +1,19 @@
+# Keep dist archives (Packagist installs) to what runtime users need.
+/.ddev            export-ignore
+/.github          export-ignore
+/docs             export-ignore
+/tests            export-ignore
+/tools            export-ignore
+/.gitattributes   export-ignore
+/.gitignore       export-ignore
+/.php-cs-fixer.dist.php export-ignore
+/phpstan.neon.dist export-ignore
+/phpunit.xml.dist  export-ignore
+/mkdocs.yml        export-ignore
+/bin/serve         export-ignore
+
+*.php text eol=lf
+*.md  text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
