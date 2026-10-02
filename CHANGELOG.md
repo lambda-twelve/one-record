@@ -35,3 +35,14 @@ All notable changes to this package are recorded here. The format follows
   deterministic JSON-LD. `Comparer` decides graph isomorphism modulo blank-node
   labels, with embedded-object IRIs (`internal:`, `neone:`) treated as blank
   nodes and numeric literals normalised; `Diff` reports the differing triples.
+- `Model`: `LogisticsObject`, `LocalGraph` (objects linked by local key, resolved
+  to URIs with an `IriMinter`; `UuidIriMinter` mints deterministic UUIDs under a
+  base URL), `ObjectBuilder`/`Embedded`/`Values` builders validated against the
+  ontology (with an optional data model version ceiling), and
+  `EmbeddedIdMinter` for the spec's stable `internal:<uuid5>` embedded ids.
+- `Change`: the `api:Change` model with JSON-LD read/write, `ChangeBuilder`
+  (diff two versions of an object into ADD/DELETE operations, editing embedded
+  objects in place or replacing them via blank nodes) and `ChangeApplier`
+  (apply a change atomically with the spec's rules: revision check, no event
+  edits, deletes before adds, ontology validation, orphan cleanup).
+- `Api\Error`, `Api\ErrorDetail`, `Api\Severity` value objects.
