@@ -1,0 +1,51 @@
+name: Architecture
+
+# The guarantees a wrapper relies on: PHPStan at level max with the
+# SDK-boundary rule (nothing under src/ may reference anything but this
+# package, PSR interfaces and PHP), and a runtime dependency set made of
+# PSR interfaces only.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: architecture-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  phpstan:
+    name: Static analysis (PHPStan max, SDK boundary)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          coverage: none
+      - uses: ramsey/composer-install@v3
+      - run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+
+  runtime-dependencies:
+    name: Runtime dependencies are PSR interfaces only
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          coverage: none
+      - uses: ramsey/composer-install@v3
+        with:
+          composer-options: "--no-dev"
+      - name: Every installed package is a psr/* interface package
+        run: |
+          composer show --no-dev --name-only --no-interaction | tee installed.txt
+          if grep -v '^psr/' installed.txt; then
+            echo "::error::A non-PSR package is installed at runtime."
+            exit 1
+          fi

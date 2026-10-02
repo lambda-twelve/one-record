@@ -24,6 +24,7 @@ ddev start
 ddev composer install
 ddev test            # PHPUnit
 ddev phpstan         # static analysis
+ddev coverage        # PHPUnit with code coverage (report in .cache/coverage)
 ddev cs              # code style check (ddev cs fix to apply)
 ddev vocab           # regenerate the vocabulary and show any diff
 ddev compliance      # run the newman compliance collection against bin/serve

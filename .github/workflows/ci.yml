@@ -25,18 +25,6 @@ jobs:
       - uses: ramsey/composer-install@v3
       - run: vendor/bin/php-cs-fixer check --diff
 
-  phpstan:
-    name: Static analysis (PHPStan max)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: "8.3"
-          coverage: none
-      - uses: ramsey/composer-install@v3
-      - run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
-
   tests:
     name: Tests (PHP ${{ matrix.php }}, ${{ matrix.dependencies }} deps)
     runs-on: ubuntu-latest
@@ -56,6 +44,28 @@ jobs:
         with:
           dependency-versions: ${{ matrix.dependencies }}
       - run: vendor/bin/phpunit --no-coverage
+
+  coverage:
+    name: Test coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: json, openssl
+          coverage: pcov
+      - uses: ramsey/composer-install@v3
+      - run: vendor/bin/phpunit --coverage-clover coverage.xml --coverage-text --only-summary-for-coverage-text
+      - name: Summarise
+        run: |
+          php tools/coverage-badge.php coverage.xml coverage.json | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            coverage.xml
+            coverage.json
 
   vocabulary:
     name: Generated vocabulary is up to date

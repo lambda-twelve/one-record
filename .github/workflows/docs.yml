@@ -1,4 +1,7 @@
-name: Publish documentation
+name: Docs
+
+# Builds the documentation site and publishes it to GitHub Pages, together
+# with the test coverage report and the coverage badge data the README reads.
 
 on:
   push:
@@ -29,6 +32,16 @@ jobs:
           python-version: "3.12"
       - run: pip install mkdocs-material
       - run: mkdocs build --strict
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: json, openssl
+          coverage: pcov
+      - uses: ramsey/composer-install@v3
+      - name: Test coverage report and badge data
+        run: |
+          vendor/bin/phpunit --coverage-clover coverage.xml --coverage-html site/coverage
+          php tools/coverage-badge.php coverage.xml site/coverage.json | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

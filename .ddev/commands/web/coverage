@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+## Description: Run the test suite with code coverage (Xdebug) and print the statement coverage; HTML report in .cache/coverage
+## Usage: coverage [phpunit args]
+## Example: "ddev coverage"
+set -euo pipefail
+XDEBUG_MODE=coverage php -d zend_extension=xdebug.so vendor/bin/phpunit --coverage-clover .cache/coverage.xml --coverage-html .cache/coverage "$@"
+php tools/coverage-badge.php .cache/coverage.xml .cache/coverage.json

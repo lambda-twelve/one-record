@@ -10,3 +10,5 @@ composer.lock
 /CLAUDE.md
 /.claude/
 /.cache/
+coverage.xml
+coverage.json
