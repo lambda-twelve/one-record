@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+## Description: Start bin/serve and run the newman compliance collection for every supported API version
+## Usage: compliance [newman args]
+## Example: "ddev compliance"
+set -euo pipefail
+exec bash tests/Compliance/run.sh "$@"

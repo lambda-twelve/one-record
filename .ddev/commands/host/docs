@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+## Description: Preview the documentation site (MkDocs Material) on http://localhost:8000
+## Usage: docs [mkdocs args]
+## Example: "ddev docs" or "ddev docs build --strict"
+set -euo pipefail
+cd "$DDEV_APPROOT"
+# The web container has no Python; MkDocs runs in a throwaway container instead.
+exec docker run --rm -it -p 8000:8000 -v "$PWD":/docs squidfunk/mkdocs-material:9 "${@:-serve --dev-addr=0.0.0.0:8000}"

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+## Description: Run the PHPUnit suite (the interop group is excluded by default)
+## Usage: test [phpunit args]
+## Example: "ddev test" or "ddev test --filter JsonLd"
+set -euo pipefail
+exec vendor/bin/phpunit "$@"

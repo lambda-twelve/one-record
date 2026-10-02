@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+## Description: Regenerate src/Vocabulary/Generated from the pinned ontologies and show any diff
+## Usage: vocab [generator args]
+## Example: "ddev vocab"
+set -euo pipefail
+php bin/generate-vocabulary "$@"
+git status --short src/Vocabulary/Generated
+git diff --exit-code --stat src/Vocabulary/Generated && echo "Generated vocabulary is up to date."
