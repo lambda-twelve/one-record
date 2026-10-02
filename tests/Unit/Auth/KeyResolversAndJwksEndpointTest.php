@@ -75,7 +75,7 @@ final class KeyResolversAndJwksEndpointTest extends TestCase
             }
 
             /**
-             * @param iterable<string, mixed> $values
+             * @param iterable<mixed, mixed> $values
              */
             public function setMultiple(iterable $values, null|int|DateInterval $ttl = null): bool
             {
