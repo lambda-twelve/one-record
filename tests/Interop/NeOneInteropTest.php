@@ -30,9 +30,9 @@ use LambdaTwelve\OneRecord\Server\InMemory\InMemoryServer;
 use LambdaTwelve\OneRecord\Server\ServerConfig;
 use LambdaTwelve\OneRecord\Server\SystemClock;
 use LambdaTwelve\OneRecord\Spec\ApiVersion;
-use LambdaTwelve\OneRecord\Tests\Support\HeaderAuthenticator;
-use LambdaTwelve\OneRecord\Tests\Support\InProcessHttpClient;
-use LambdaTwelve\OneRecord\Tests\Support\RecordingDispatcher;
+use LambdaTwelve\OneRecord\Testing\HeaderAuthenticator;
+use LambdaTwelve\OneRecord\Testing\InProcessHttpClient;
+use LambdaTwelve\OneRecord\Testing\RecordingDispatcher;
 use LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo;
 use LambdaTwelve\OneRecord\Vocabulary\Generated\CodeLists\MeasurementUnitCode;
 use LambdaTwelve\OneRecord\Vocabulary\Vocabulary;
@@ -98,7 +98,7 @@ final class NeOneInteropTest extends TestCase
 
     private function ourClient(string $agent): OneRecordClient
     {
-        return new OneRecordClient(new InProcessHttpClient($this->ours->handler), $this->factory, $this->factory, new StaticTokenProvider($agent), self::OURS);
+        return new OneRecordClient(new InProcessHttpClient($this->ours->handler, $this->factory, $this->factory), $this->factory, $this->factory, new StaticTokenProvider($agent), self::OURS);
     }
 
     /**

@@ -6,9 +6,9 @@ namespace LambdaTwelve\OneRecord\Tests\Unit\Client;
 
 use LambdaTwelve\OneRecord\Client\ClientCredentialsTokenProvider;
 use LambdaTwelve\OneRecord\Client\ClientException;
-use LambdaTwelve\OneRecord\Tests\Support\ArrayCache;
-use LambdaTwelve\OneRecord\Tests\Support\FakeHttpClient;
-use LambdaTwelve\OneRecord\Tests\Support\FixedClock;
+use LambdaTwelve\OneRecord\Testing\ArrayCache;
+use LambdaTwelve\OneRecord\Testing\FakeHttpClient;
+use LambdaTwelve\OneRecord\Testing\FixedClock;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Nyholm\Psr7\Response;
 use PHPUnit\Framework\TestCase;

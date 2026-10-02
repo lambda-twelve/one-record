@@ -59,6 +59,8 @@ final class LayerRule implements Rule
         'Server' => [...self::DOCUMENTS, 'Server\\Spi', 'Server\\Event'],
         // The client talks to other servers; it must never reach into ours.
         'Client' => [...self::DOCUMENTS, 'Auth'],
+        // Test support shipped to hosts: doubles and store contract tests see every layer.
+        'Testing' => [...self::DOCUMENTS, 'Auth', 'Server\\Spi', 'Server\\Event', 'Server\\InMemory', 'Server', 'Client'],
     ];
 
     public function __construct(private readonly string $sourceDirectory = 'src') {}

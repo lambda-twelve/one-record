@@ -13,7 +13,7 @@ use LambdaTwelve\OneRecord\Change\ChangeBuilder;
 use LambdaTwelve\OneRecord\Model\Builder\ObjectBuilder;
 use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Server\DataHolder;
-use LambdaTwelve\OneRecord\Tests\Support\RecordingUnitOfWork;
+use LambdaTwelve\OneRecord\Testing\RecordingUnitOfWork;
 use LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo;
 
 /**

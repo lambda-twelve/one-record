@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace LambdaTwelve\OneRecord\Tests\Support;
+namespace LambdaTwelve\OneRecord\Testing;
 
 use LambdaTwelve\OneRecord\Server\Spi\UnitOfWork;
 use Throwable;

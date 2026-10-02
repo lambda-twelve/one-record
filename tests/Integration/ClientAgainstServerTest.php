@@ -26,7 +26,7 @@ use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Server\DataHolder;
 use LambdaTwelve\OneRecord\Server\Event\NotificationReceived;
 use LambdaTwelve\OneRecord\Spec\ApiVersion;
-use LambdaTwelve\OneRecord\Tests\Support\InProcessHttpClient;
+use LambdaTwelve\OneRecord\Testing\InProcessHttpClient;
 use LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo;
 use LambdaTwelve\OneRecord\Vocabulary\Generated\CodeLists\MeasurementUnitCode;
 use Nyholm\Psr7\Factory\Psr17Factory;
@@ -40,7 +40,7 @@ final class ClientAgainstServerTest extends ServerTestCase
     private function client(string $agent = self::PARTNER, ?ApiVersion $version = null): OneRecordClient
     {
         $factory = new Psr17Factory();
-        $client = new OneRecordClient(new InProcessHttpClient($this->server->handler), $factory, $factory, new StaticTokenProvider($agent), self::BASE, clock: $this->clock);
+        $client = new OneRecordClient(new InProcessHttpClient($this->server->handler, $factory, $factory), $factory, $factory, new StaticTokenProvider($agent), self::BASE, clock: $this->clock);
 
         return $version === null ? $client : $client->withApiVersion($version);
     }

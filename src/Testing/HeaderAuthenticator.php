@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace LambdaTwelve\OneRecord\Tests\Support;
+namespace LambdaTwelve\OneRecord\Testing;
 
 use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Server\Spi\Agent;
@@ -15,9 +15,11 @@ use Psr\Http\Message\ServerRequestInterface;
  */
 final class HeaderAuthenticator implements Authenticator
 {
+    public const string HEADER = 'X-Test-Agent';
+
     public function authenticate(ServerRequestInterface $request): ?Agent
     {
-        $iri = $request->getHeaderLine('X-Test-Agent');
+        $iri = $request->getHeaderLine(self::HEADER);
 
         return $iri === '' ? null : new Agent(new Iri($iri), 'https://test.issuer', ['sub' => $iri]);
     }

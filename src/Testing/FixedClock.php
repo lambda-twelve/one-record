@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace LambdaTwelve\OneRecord\Tests\Support;
+namespace LambdaTwelve\OneRecord\Testing;
 
 use DateTimeImmutable;
 use Psr\Clock\ClockInterface;

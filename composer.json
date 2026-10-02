@@ -47,7 +47,8 @@
     },
     "suggest": {
         "psr/http-client": "To use the ONE Record client (talking to partners' servers) and the JWKS key resolver: any PSR-18 HTTP client",
-        "psr/simple-cache": "To cache partner tokens, server information and JWKS documents: any PSR-16 cache"
+        "psr/simple-cache": "To cache partner tokens, server information and JWKS documents: any PSR-16 cache",
+        "phpunit/phpunit": "To run the store contract tests in Testing\\Contract against your own SPI implementations"
     },
     "autoload": {
         "psr-4": {

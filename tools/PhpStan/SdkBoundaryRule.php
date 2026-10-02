@@ -51,6 +51,10 @@ final class SdkBoundaryRule implements Rule
                 return [];
             }
         }
+        // The shipped test support (contract tests, doubles) is the one place PHPUnit may appear.
+        if (str_starts_with($resolved, 'PHPUnit\\') && str_contains(str_replace('\\', '/', $scope->getFile()), '/src/Testing/')) {
+            return [];
+        }
 
         return [
             RuleErrorBuilder::message(\sprintf(

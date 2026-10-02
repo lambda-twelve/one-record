@@ -73,7 +73,7 @@ final class ServerInformationAndNegotiationTest extends ServerTestCase
 
         return new \LambdaTwelve\OneRecord\Server\InMemory\InMemoryServer(
             new \LambdaTwelve\OneRecord\Server\ServerConfig(self::BASE, new \LambdaTwelve\OneRecord\Rdf\Iri(self::HOLDER), apiVersions: [\LambdaTwelve\OneRecord\Spec\ApiVersion::V2_2_0]),
-            new \LambdaTwelve\OneRecord\Tests\Support\HeaderAuthenticator(),
+            new \LambdaTwelve\OneRecord\Testing\HeaderAuthenticator(),
             $this->clock,
             $this->dispatcher,
             $factory,
