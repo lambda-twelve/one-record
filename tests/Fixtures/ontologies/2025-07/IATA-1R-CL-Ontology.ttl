@@ -1,0 +1,49 @@
+@prefix : <https://onerecord.iata.org/ns/code-lists#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@base <https://onerecord.iata.org/ns/code-lists> .
+
+<https://onerecord.iata.org/ns/code-lists> rdf:type owl:Ontology ;
+    owl:versionIRI <https://onerecord.iata.org/ns/code-lists/1.1.0> ;
+    owl:versionInfo "1.1.0" .
+
+<https://onerecord.iata.org/ns/code-lists/MeasurementUnitCode> rdf:type owl:Class ;
+    rdfs:comment "Open code list of units"@en .
+
+<https://onerecord.iata.org/ns/code-lists/WeightUnitCode> rdf:type owl:Class ;
+    owl:equivalentClass [ rdf:type owl:Class ;
+                          owl:oneOf ( <https://onerecord.iata.org/ns/code-lists/MeasurementUnitCode#KGM>
+                                      <https://onerecord.iata.org/ns/code-lists/MeasurementUnitCode#LBR>
+                                    )
+                        ] ;
+    rdfs:comment "Restricted sub-code list of weight units"@en .
+
+<https://onerecord.iata.org/ns/code-lists/DensityGroupCode> rdf:type owl:Class ;
+    owl:equivalentClass [ rdf:type owl:Class ;
+                          owl:oneOf ( <https://onerecord.iata.org/ns/code-lists/DensityGroupCode#0>
+                                      <https://onerecord.iata.org/ns/code-lists/DensityGroupCode#10>
+                                    )
+                        ] .
+
+<https://onerecord.iata.org/ns/code-lists/MeasurementUnitCode#KGM> rdf:type owl:NamedIndividual ,
+        <https://onerecord.iata.org/ns/code-lists/MeasurementUnitCode> ,
+        <https://onerecord.iata.org/ns/code-lists/WeightUnitCode> ;
+    rdfs:comment "Kilogram"@en ;
+    rdfs:label "KGM"@en .
+
+<https://onerecord.iata.org/ns/code-lists/MeasurementUnitCode#LBR> rdf:type owl:NamedIndividual ,
+        <https://onerecord.iata.org/ns/code-lists/MeasurementUnitCode> ,
+        <https://onerecord.iata.org/ns/code-lists/WeightUnitCode> ;
+    rdfs:comment "Pound"@en .
+
+<https://onerecord.iata.org/ns/code-lists/MeasurementUnitCode#CMT> rdf:type owl:NamedIndividual ,
+        <https://onerecord.iata.org/ns/code-lists/MeasurementUnitCode> ;
+    rdfs:comment "Centimetre"@en .
+
+<https://onerecord.iata.org/ns/code-lists/DensityGroupCode#0> rdf:type owl:NamedIndividual ,
+        <https://onerecord.iata.org/ns/code-lists/DensityGroupCode> .
+
+<https://onerecord.iata.org/ns/code-lists/DensityGroupCode#10> rdf:type owl:NamedIndividual ,
+        <https://onerecord.iata.org/ns/code-lists/DensityGroupCode> .
