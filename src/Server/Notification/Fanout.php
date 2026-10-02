@@ -11,6 +11,9 @@ use LambdaTwelve\OneRecord\Api\SubscriptionEventType;
 use LambdaTwelve\OneRecord\Model\LogisticsEvent;
 use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Server\Services;
+use LambdaTwelve\OneRecord\Server\Spi\Action;
+use LambdaTwelve\OneRecord\Server\Spi\Agent;
+use LambdaTwelve\OneRecord\Server\Spi\Decision;
 use LambdaTwelve\OneRecord\Server\Spi\OutboundNotification;
 use LambdaTwelve\OneRecord\Server\Spi\StoredObject;
 
@@ -74,6 +77,12 @@ final class Fanout
             if (!$subscription->includes($eventType)) {
                 continue;
             }
+            // A subscription says what to tell; the access policy says what may be disclosed (spec question 25).
+            // No read permission: the subscriber learns that something happened, not what. Hidden: nothing at all.
+            $decision = $this->services->policy->decide(new Agent($subscription->subscriber), Action::ReadLogisticsObject, $object->iri);
+            if ($decision === Decision::Hide) {
+                continue;
+            }
             $base = new Notification(
                 NotificationEventType::from($eventType->value),
                 $object->iri,
@@ -81,7 +90,7 @@ final class Fanout
                 $triggeredBy ?? $entry['request'],
                 [],
                 [],
-                $subscription->sendLogisticsObjectBody ? $object : null,
+                $subscription->sendLogisticsObjectBody && $decision === Decision::Allow ? $object : null,
             );
             $this->services->outbox->enqueue(new OutboundNotification($subscription->subscriber, $decorate($base), $now, $this->services->ids->next()));
         }

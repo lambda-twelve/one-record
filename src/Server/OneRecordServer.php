@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace LambdaTwelve\OneRecord\Server;
 
+use LambdaTwelve\OneRecord\Api\Error;
 use LambdaTwelve\OneRecord\Api\InvalidDocument;
+use LambdaTwelve\OneRecord\JsonLd\JsonLdException;
 use LambdaTwelve\OneRecord\Server\Http\ContentNegotiation;
 use LambdaTwelve\OneRecord\Server\Http\HttpException;
 use LambdaTwelve\OneRecord\Server\Http\Negotiated;
@@ -79,6 +81,8 @@ final class OneRecordServer implements RequestHandlerInterface
             return $this->responder->error($e->status, $e->errors, $negotiated, $e->headers, $head);
         } catch (InvalidDocument $e) {
             return $this->responder->error(400, $e->errors, $negotiated, [], $head);
+        } catch (JsonLdException $e) {
+            return $this->responder->error(400, [Error::of('Invalid body request', '400', $e->getMessage())], $negotiated, [], $head);
         } catch (Throwable $e) {
             $this->logger->error('Unhandled error while serving a ONE Record request', ['exception' => $e, 'method' => $request->getMethod(), 'path' => $request->getUri()->getPath()]);
             $internal = HttpException::internal();

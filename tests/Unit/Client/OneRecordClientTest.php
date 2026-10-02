@@ -276,4 +276,23 @@ final class OneRecordClientTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         new OneRecordClient($this->http, $factory, $factory, new StaticTokenProvider('tok'), self::PARTNER, additionalOrigins: ['ftp://files.partner.example']);
     }
+
+    public function testAr026AnExpiringDelegationIsNotSilentlyWidenedForA22Partner(): void
+    {
+        $this->http->queue($this->serverInformation([ApiVersion::V2_2_0]));
+        $client = $this->client();
+        $delegation = new \LambdaTwelve\OneRecord\Api\AccessDelegation([\LambdaTwelve\OneRecord\Api\Permission::GetLogisticsObject], [new Iri(self::PARTNER . '/logistics-objects/them')], [new Iri(self::PARTNER . '/logistics-objects/p1')], expiresAt: new DateTimeImmutable('2026-10-02T12:01:00Z'));
+
+        try {
+            $client->requestAccessDelegation($delegation);
+            self::fail('a 2.2 partner cannot be asked for a time-limited delegation');
+        } catch (ClientException $e) {
+            self::assertStringContainsString('cannot express api:expiresAt', $e->getMessage());
+        }
+        self::assertCount(1, $this->http->requests, 'nothing was sent');
+
+        $this->http->queue(new Response(201, ['Location' => self::PARTNER . '/action-requests/d1']));
+        $unlimited = new \LambdaTwelve\OneRecord\Api\AccessDelegation([\LambdaTwelve\OneRecord\Api\Permission::GetLogisticsObject], [new Iri(self::PARTNER . '/logistics-objects/them')], [new Iri(self::PARTNER . '/logistics-objects/p1')]);
+        self::assertSame(self::PARTNER . '/action-requests/d1', $client->requestAccessDelegation($unlimited)->value);
+    }
 }

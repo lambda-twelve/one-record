@@ -382,7 +382,13 @@ final class OneRecordClient
      */
     public function requestAccessDelegation(AccessDelegation $delegation): Iri
     {
-        return self::location($this->send('POST', $this->endpoint . '/access-delegations', $delegation->toJsonLd($this->apiVersion())));
+        $version = $this->apiVersion();
+        if ($delegation->expiresAt !== null && !ApiFeatures::available($version, ApiFeatures::ACCESS_DELEGATION_EXPIRY)) {
+            // Rendering an old edition may drop a property; requesting an authorization may not silently widen it (AR-026).
+            throw new ClientException(\sprintf('%s speaks API %s, which cannot express api:expiresAt; an unlimited delegation would be requested instead. Drop the expiry deliberately or speak to a 2.3 partner.', $this->endpoint, $version->value));
+        }
+
+        return self::location($this->send('POST', $this->endpoint . '/access-delegations', $delegation->toJsonLd($version)));
     }
 
     /**

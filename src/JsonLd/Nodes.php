@@ -107,23 +107,46 @@ final class Nodes
         return (int) $term->lexical;
     }
 
+    /**
+     * The one dateTime value of a property, or null when the property is absent.
+     * A value that is present but not an xsd:dateTime is an error: an expiry
+     * that fails to parse must never read as "no expiry" (AR-016).
+     *
+     * @throws JsonLdException
+     */
     public static function dateTime(Graph $graph, Iri|BlankNode $node, string $predicate): ?DateTimeImmutable
     {
-        $term = $graph->firstObject($node, $predicate);
-        if (!$term instanceof Literal) {
+        $terms = $graph->objects($node, $predicate);
+        if ($terms === []) {
             return null;
         }
+        if (\count($terms) > 1) {
+            throw JsonLdException::at(self::compact($predicate), 'Expected one dateTime value, got ' . \count($terms));
+        }
+        $term = $terms[0];
+        if (!$term instanceof Literal) {
+            throw JsonLdException::at(self::compact($predicate), 'Expected a dateTime literal, got a node');
+        }
 
-        return self::parseDateTime($term->lexical);
+        return self::parseDateTime($term->lexical) ?? throw JsonLdException::at(self::compact($predicate), \sprintf('"%s" is not an xsd:dateTime (YYYY-MM-DDThh:mm:ss[.fff](Z|±hh:mm))', $term->lexical));
     }
 
+    /**
+     * Strict xsd:dateTime lexical form; PHP's free-form date grammar would
+     * accept "tomorrow" and "0", which no partner means.
+     */
     public static function parseDateTime(string $lexical): ?DateTimeImmutable
     {
+        if (preg_match('/^-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/', $lexical) !== 1) {
+            return null;
+        }
         try {
-            return new DateTimeImmutable($lexical);
+            $parsed = new DateTimeImmutable($lexical);
         } catch (Exception) {
             return null;
         }
+        // PHP rolls invalid calendar dates over (2026-02-30 becomes March); the spec's grammar does not.
+        return str_starts_with($parsed->format('Y-m-d'), substr($lexical, 0, 10)) ? $parsed : null;
     }
 
     /**

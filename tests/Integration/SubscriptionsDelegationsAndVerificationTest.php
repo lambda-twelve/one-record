@@ -145,13 +145,21 @@ final class SubscriptionsDelegationsAndVerificationTest extends ServerTestCase
         $request = $holder->subscribe($this->subscription(Cargo::Piece, TopicType::Type, body: true));
         self::assertSame(RequestStatus::Accepted, $request->status);
 
+        // A new object: the subscriber has no read grant on it yet, so it learns of it without the body.
         $holder->create($this->piece('piece-9'));
         $notifications = $this->server->outbox->drain();
         self::assertCount(1, $notifications);
         self::assertSame(NotificationEventType::LogisticsObjectCreated, $notifications[0]->notification->eventType);
+        self::assertNull($notifications[0]->notification->body, 'the body follows read access, not the subscription alone');
+        self::assertSame(['@id' => self::BASE . '/logistics-objects/piece-9'], $notifications[0]->notification->toJsonLd()['api:hasLogisticsObject']);
+
+        // A subscriber the policy lets read everything (the host's own system, say) gets the body embedded.
+        $this->server->policy->addInternal(new Iri(self::PARTNER));
+        $holder->create($this->piece('piece-9b'));
+        $notifications = $this->server->outbox->drain();
         $json = $notifications[0]->notification->toJsonLd();
         $embedded = self::arr($json['api:hasLogisticsObject']);
-        self::assertSame(self::BASE . '/logistics-objects/piece-9', $embedded['@id']);
+        self::assertSame(self::BASE . '/logistics-objects/piece-9b', $embedded['@id']);
         self::assertSame('Books', $embedded['cargo:goodsDescription']);
 
         // A Shipment is not a Piece.
