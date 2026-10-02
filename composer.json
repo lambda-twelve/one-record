@@ -1,9 +1,15 @@
 {
     "name": "lambda-twelve/one-record",
-    "description": "IATA ONE Record for PHP: a framework-agnostic server (PSR-15) and client (PSR-18) for ONE Record API 2.2/2.3 and data model 3.2/3.3.",
+    "description": "A framework-agnostic PHP server (PSR-15) and client (PSR-18) implementation for the IATA ONE Record API.",
     "type": "library",
     "license": "Apache-2.0",
-    "keywords": ["iata", "one-record", "air-cargo", "json-ld", "logistics"],
+    "keywords": [
+        "iata",
+        "one-record",
+        "air-cargo",
+        "json-ld",
+        "logistics"
+    ],
     "homepage": "https://github.com/lambda-twelve/one-record",
     "authors": [
         {
@@ -22,13 +28,10 @@
         "ext-openssl": "*",
         "psr/clock": "^1.0",
         "psr/event-dispatcher": "^1.0",
-        "psr/http-client": "^1.0",
         "psr/http-factory": "^1.0",
         "psr/http-message": "^1.1 || ^2.0",
         "psr/http-server-handler": "^1.0",
-        "psr/http-server-middleware": "^1.0",
-        "psr/log": "^2.0 || ^3.0",
-        "psr/simple-cache": "^2.0 || ^3.0"
+        "psr/log": "^2.0 || ^3.0"
     },
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^3.75",
@@ -38,7 +41,13 @@
         "phpstan/phpstan": "^2.1",
         "phpstan/phpstan-phpunit": "^2.0",
         "phpstan/phpstan-strict-rules": "^2.0",
-        "phpunit/phpunit": "^11.5"
+        "phpunit/phpunit": "^11.5",
+        "psr/http-client": "^1.0",
+        "psr/simple-cache": "^2.0 || ^3.0"
+    },
+    "suggest": {
+        "psr/http-client": "To use the ONE Record client (talking to partners' servers) and the JWKS key resolver: any PSR-18 HTTP client",
+        "psr/simple-cache": "To cache partner tokens, server information and JWKS documents: any PSR-16 cache"
     },
     "autoload": {
         "psr-4": {
