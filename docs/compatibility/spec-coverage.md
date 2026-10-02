@@ -13,42 +13,42 @@ Spec sources: [2025-07 edition](https://iata-cargo.github.io/ONE-Record/2025-07/
 
 | Endpoint | API | Status | Notes / test |
 | --- | --- | --- | --- |
-| `GET /` server information | 2.2, 2.3 | planned | |
-| `POST /logistics-objects` | 2.2, 2.3 | planned | Internal-only per spec; exposed only when the access policy allows |
-| `GET /logistics-objects/{id}` | 2.2, 2.3 | planned | incl. `?at=` historical reads and `?embedded=true` |
-| `HEAD /logistics-objects/{id}` | 2.2, 2.3 | planned | |
-| `PATCH /logistics-objects/{id}` (Change → ChangeRequest) | 2.2, 2.3 | planned | 201 + `Location` + `Type` |
-| `POST /logistics-objects/{id}` (Verification → VerificationRequest) | 2.2, 2.3 | planned | |
-| `GET /logistics-objects/{id}/audit-trail` | 2.2, 2.3 | planned | `updated-from`, `updated-to`, `status` |
-| `POST /logistics-objects/{id}/logistics-events` | 2.2, 2.3 | planned | |
-| `GET /logistics-objects/{id}/logistics-events` | 2.2, 2.3 | planned | `event-code`, `created-after/-before`, `occurred-after/-before`, `sort`, `limit`, `skip`; `api:Collection` body |
-| `HEAD /logistics-objects/{id}/logistics-events` | 2.2, 2.3 | planned | |
-| `GET /logistics-objects/{id}/logistics-events/{eventId}` | 2.2, 2.3 | planned | |
-| `POST /logistics-events` (bulk, 207 Multi-Status) | 2.3 | planned | Optional in the spec; off by default |
-| `POST /notifications` | 2.2, 2.3 | planned | 204 |
-| `GET /subscriptions?topicType&topic` | 2.2, 2.3 | planned | Answered from the host's own subscription interests |
-| `POST /subscriptions` (Subscription → SubscriptionRequest) | 2.2, 2.3 | planned | |
-| `POST /access-delegations` (AccessDelegation → AccessDelegationRequest) | 2.2, 2.3 | planned | 2.2 allows several `isRequestedFor`; 2.3 one |
-| `GET /action-requests/{id}` | 2.2, 2.3 | planned | |
-| `HEAD /action-requests/{id}` | 2.2, 2.3 | planned | |
-| `PATCH /action-requests/{id}?status=` | 2.2, 2.3 | planned | Internal-only per spec; exposed only when the access policy allows |
-| `DELETE /action-requests/{id}` (revoke) | 2.2, 2.3 | planned | 422 on a state that cannot be revoked (2.3 wording) |
-| `POST /oauth/token` (client credentials) | n/a | planned | Not part of the ONE Record API; an optional helper component |
+| `GET /` server information | 2.2, 2.3 | implemented | [ServerInformationAndNegotiationTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/ServerInformationAndNegotiationTest.php) |
+| `POST /logistics-objects` | 2.2, 2.3 | implemented | Internal-only per spec; exposed only when the access policy allows. [CreateObjectAndNotificationsTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/CreateObjectAndNotificationsTest.php) |
+| `GET /logistics-objects/{id}` | 2.2, 2.3 | implemented | incl. `?at=` historical reads and `?embedded=true`. [LogisticsObjectReadTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/LogisticsObjectReadTest.php) |
+| `HEAD /logistics-objects/{id}` | 2.2, 2.3 | implemented | [LogisticsObjectReadTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/LogisticsObjectReadTest.php) |
+| `PATCH /logistics-objects/{id}` (Change → ChangeRequest) | 2.2, 2.3 | implemented | 201 + `Location` + `Type`; the holder's own changes are applied at once. [ChangeRequestsTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/ChangeRequestsTest.php) |
+| `POST /logistics-objects/{id}` (Verification → VerificationRequest) | 2.2, 2.3 | implemented | [SubscriptionsDelegationsAndVerificationTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/SubscriptionsDelegationsAndVerificationTest.php) |
+| `GET /logistics-objects/{id}/audit-trail` | 2.2, 2.3 | implemented | `updated-from`, `updated-to`, `status`. [LogisticsObjectReadTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/LogisticsObjectReadTest.php), [ChangeRequestsTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/ChangeRequestsTest.php) |
+| `POST /logistics-objects/{id}/logistics-events` | 2.2, 2.3 | implemented | [LogisticsEventsTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/LogisticsEventsTest.php) |
+| `GET /logistics-objects/{id}/logistics-events` | 2.2, 2.3 | implemented | `event-code`, `created-after/-before`, `occurred-after/-before`, `sort`, `limit`, `skip`; `api:Collection` body. [LogisticsEventsTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/LogisticsEventsTest.php) |
+| `HEAD /logistics-objects/{id}/logistics-events` | 2.2, 2.3 | implemented | [LogisticsEventsTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/LogisticsEventsTest.php) |
+| `GET /logistics-objects/{id}/logistics-events/{eventId}` | 2.2, 2.3 | implemented | [LogisticsEventsTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/LogisticsEventsTest.php) |
+| `POST /logistics-events` (bulk, 207 Multi-Status) | 2.3 | implemented | Optional in the spec; off by default (`ServerConfig::$bulkLogisticsEvents`); 404 at 2.2. [SubscriptionsDelegationsAndVerificationTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/SubscriptionsDelegationsAndVerificationTest.php) |
+| `POST /notifications` | 2.2, 2.3 | implemented | 204; raises `NotificationReceived`. [CreateObjectAndNotificationsTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/CreateObjectAndNotificationsTest.php) |
+| `GET /subscriptions?topicType&topic` | 2.2, 2.3 | implemented | Answered from the host's own subscription interests; several as `api:Collection` (question 17). [SubscriptionsDelegationsAndVerificationTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/SubscriptionsDelegationsAndVerificationTest.php) |
+| `POST /subscriptions` (Subscription → SubscriptionRequest) | 2.2, 2.3 | implemented | [SubscriptionsDelegationsAndVerificationTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/SubscriptionsDelegationsAndVerificationTest.php) |
+| `POST /access-delegations` (AccessDelegation → AccessDelegationRequest) | 2.2, 2.3 | implemented | `isRequestedFor` read as list or single value; `api:expiresAt` honoured. [SubscriptionsDelegationsAndVerificationTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/SubscriptionsDelegationsAndVerificationTest.php) |
+| `GET /action-requests/{id}` | 2.2, 2.3 | implemented | Status-since and history at 2.3 only. [ChangeRequestsTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/ChangeRequestsTest.php) |
+| `HEAD /action-requests/{id}` | 2.2, 2.3 | implemented | [ChangeRequestsTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/ChangeRequestsTest.php) |
+| `PATCH /action-requests/{id}?status=` | 2.2, 2.3 | implemented | Internal-only per spec; exposed only when the access policy allows. [ChangeRequestsTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/ChangeRequestsTest.php) |
+| `DELETE /action-requests/{id}` (revoke) | 2.2, 2.3 | implemented | 422 on a state that cannot be revoked at 2.3; 400 at 2.2. [ChangeRequestsTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/ChangeRequestsTest.php) |
+| `POST /oauth/token` (client credentials) | n/a | implemented | Not part of the ONE Record API; an optional helper component (`Auth\TokenEndpoint`). [TokenEndpointAndAuthenticatorTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Unit/Auth/TokenEndpointAndAuthenticatorTest.php) |
 
 ## Cross-cutting
 
 | Rule | Status | Notes |
 | --- | --- | --- |
-| `Accept` version negotiation and `Content-Type` echo | planned | |
-| `Content-Language` on every response; `Accept-Language` honoured for `en-US` | planned | |
-| `Type` header with the most specific class | planned | |
-| `Revision`, `Latest-Revision`, `Last-Modified` (RFC 1123) | planned | |
-| `api:hasRevision` / `api:hasLatestRevision` in logistics-object bodies | planned | |
-| `api:Error` body with `api:ErrorDetail` on every 4xx/5xx; 2.3 standard titles | planned | |
-| Access control per logistics object with the four permissions, default deny (403) | planned | A policy may answer 404 instead to avoid confirming existence |
-| Stable embedded-object ids (`internal:<uuid5>`) | planned | |
-| Change application: atomic, deletes before adds, revision check, no `events` edits, subject validation | planned | |
-| Action-request state machines (change/subscription/delegation and verification) | planned | |
-| Notification fan-out: by identifier or type, event-type filter, `notifyRequestStatusChange`, `sendLogisticsObjectBody` | planned | |
-| Request size limit, UTF-8 bodies, no 301 redirects | planned | |
+| `Accept` version negotiation and `Content-Type` echo | implemented | [ServerInformationAndNegotiationTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/ServerInformationAndNegotiationTest.php) |
+| `Content-Language` on every response | implemented | Languages from `ServerConfig::$languages` |
+| `Type` header with the most specific class | implemented | On every response, errors included (`api:Error`) |
+| `Revision`, `Latest-Revision`, `Last-Modified` (RFC 1123) | implemented | [LogisticsObjectReadTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/LogisticsObjectReadTest.php) |
+| `api:hasRevision` / `api:hasLatestRevision` in logistics-object bodies | implemented | |
+| `api:Error` body with `api:ErrorDetail` on every 4xx/5xx; 2.3 standard titles | implemented | `api:hasSeverity` written at 2.3 only |
+| Access control per logistics object with the four permissions, default deny (403) | implemented | A policy may answer 404 instead (`Decision::Hide`); grants from accepted access delegations honoured |
+| Stable embedded-object ids (`internal:<uuid5>`) | implemented | Minted when an object is first stored; blank nodes in changes minted on application |
+| Change application: atomic, deletes before adds, revision check, no `events` edits, subject validation | implemented | A failed application leaves the request `REQUEST_FAILED` with errors |
+| Action-request state machines (change/subscription/delegation and verification) | implemented | Other pending changes on the replaced revision rejected with 409 |
+| Notification fan-out: by identifier or type, event-type filter, `notifyRequestStatusChange`, `sendLogisticsObjectBody` | implemented | Queued in the `NotificationOutbox`; the host sends |
+| Request size limit, UTF-8 bodies, no 301 redirects | implemented | 413 above `ServerConfig::$maxBodyBytes` |
 | `text/turtle` content type | not planned | JSON-LD is the mandatory serialisation; Turtle may follow after 1.0.0 |

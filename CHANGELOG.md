@@ -57,4 +57,28 @@ it. From 1.0.0 on, breaking changes need a new major version.
   JWK to PEM), `JwtAuthenticator` for the server's `Authenticator` SPI, and
   `TokenEndpoint`, a PSR-15 OAuth 2.0 client-credentials endpoint with a
   `ClientCredentialsVerifier` SPI and an in-memory reference implementation.
+- `Server`: the PSR-15 ONE Record server. `OneRecordServer` negotiates the
+  API version, routes, authenticates and answers every failure as an
+  `api:Error`; `ServerConfig` holds base URL, base path, data holder,
+  versions, languages and limits. Endpoints for server information, logistics
+  objects (read with `?at=` and `?embedded=`, create, change, verify), audit
+  trail, logistics events (single and 2.3 bulk), notifications,
+  subscriptions, access delegations and action requests. `ActionRequests`
+  implements the lifecycle (accept applies changes, grants delegations,
+  rejects stale pending changes); `DataHolder` is the host's PHP API
+  (`create`, `update`, `publish`, `announce`, `accept`/`reject`/`acknowledge`/
+  `revoke`, `subscribe`, `forget`); `Notification\Fanout` queues notifications
+  in the outbox. PSR-14 events for created/revised objects, received events
+  and notifications, and action-request changes.
+- `Server\Spi`: the interfaces a host implements (`LogisticsObjectStore`,
+  `LogisticsEventStore`, `ActionRequestStore`, `SubscriptionStore`,
+  `AccessDelegationStore`, `NotificationOutbox`, `Authenticator`,
+  `AccessPolicy`) with in-memory implementations in `Server\InMemory` and
+  `InMemoryServer` wiring them all; `SystemClock`.
+- `Api`: value objects for every API document (`Subscription`,
+  `AccessDelegation`, `Verification`, `Notification`, `ServerInformation`,
+  `ActionRequest`, `Collection`, `ErrorDocument`) and `Spec\ApiFeatures`,
+  the table of properties gated by API version.
+- `bin/serve`: the in-memory server under PHP's built-in web server with an
+  OAuth 2.0 token endpoint, for development and the compliance collection.
 - `Server\Spi\Authenticator` and `Server\Spi\Agent`.

@@ -49,3 +49,11 @@ The SDK is a single PSR-15 request handler plus a client. Everything a host
 must provide (storage, authentication, access policy, outgoing notifications)
 is an interface with an in-memory reference implementation, so the whole thing
 runs and is tested with no framework at all.
+
+## Quality signals
+
+Every push runs the test suite on PHP 8.3, 8.4 and 8.5 with lowest and highest
+dependencies, PHPStan at level max with the SDK-boundary rule, the code style
+check, the vocabulary regeneration check and this site's build. The
+[test coverage report](https://lambda-twelve.github.io/one-record/coverage/)
+is published with the site on every change to `main`.
