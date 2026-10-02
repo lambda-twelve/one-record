@@ -98,6 +98,27 @@ it. From 1.0.0 on, breaking changes need a new major version.
   `JwksKeyResolver`, `Auth\JwksEndpoint`; `ServerBuilder::routes()`; objects
   created over HTTP fan out to subscribers; and the `Testing` namespace with
   the doubles and `Testing\Contract` store contract tests.
+- Adversarial review round (2026-10-03), one regression test per finding:
+  client credentials bound to the partner's origin (`additionalOrigins` for
+  multi-host partners); `ActionRequestStore::transition()` compare-and-set
+  and lifecycle decisions made on stored state; shared visited set in graph
+  collectors; strict `xsd:dateTime` parsing (a malformed expiry is a 400, not
+  "no expiry"); the client refuses to request an expiring delegation from a
+  2.2 partner; fan-out consults the access policy before disclosing a body;
+  `DataHolder::change()`/`update()`/`publish()` throw `ChangeFailed`;
+  language-tagged literals refused in changes; exact `xsd:decimal`
+  comparison; sound canonical blank-node labels; order-independent change
+  validation; discovery falls back through API versions on 406; publishers
+  may query offers for their own objects; bulk events validated like single
+  ones; client checks the answer is about the requested object; typed links
+  rewritten in historical reads; RFC 6749 form-encoding of Basic
+  credentials; `q=0` exclusions and configured body versions honoured;
+  `isTriggeredBy` never names an organisation; global event IRI uniqueness;
+  malformed `?at=` and non-finite numbers answer 400; `Idempotency-Key` on
+  sent and received notifications; JWKS refresh cooldown; only the requestor
+  or the policy may revoke; reference stores keep snapshots; position-aware
+  JSON-LD compaction, RFC 3986 `@base` resolution, term-scoped coercion and
+  labelled blank roots.
 - `Server\Spi\Authenticator` and `Server\Spi\Agent`.
 - Interoperability suite (`tests/Interop/`): NE:ONE built from source at a
   pinned commit as a comparison oracle; the same graph published to both

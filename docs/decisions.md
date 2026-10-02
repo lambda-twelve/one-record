@@ -67,3 +67,17 @@ what is actually left: use by the Laravel wrapper and by partners may still
 change the public API, and betas allow that. 1.0.0 follows once a wrapper has
 run against a partner without API changes.
 
+## Adversarial review rounds are folded in, finding by finding
+
+Before the first beta an independent adversarial review (2026-10-03) was
+run against the full working tree. Every confirmed finding became a
+regression test named by its id (`AdversarialFindingsTest` and the unit
+suites) and the smallest correction that removes the cause, not the
+reproducer; findings that are really unanswered questions in the
+specification went into the [spec questions](spec-questions.md) register
+(25 to 29) with the interim choice stated as such. Three rules came out of
+it that now hold everywhere: a client's credentials go only to the origin it
+was built for; lifecycle decisions are compare-and-set on the stored state,
+never on a caller's snapshot; and rendering a document for an older edition
+may drop a property, but requesting an authorisation may never silently
+widen it.
