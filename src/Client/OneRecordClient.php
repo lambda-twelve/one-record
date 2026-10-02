@@ -60,6 +60,9 @@ final class OneRecordClient
 
     private readonly string $endpoint;
 
+    /** @var list<string> normalised origins (scheme://host:port) a request may be sent to with this partner's token */
+    private readonly array $origins;
+
     /** @var list<ApiVersion> */
     private readonly array $ourVersions;
 
@@ -73,6 +76,8 @@ final class OneRecordClient
      * @param string $serverEndpoint the partner's ONE Record server endpoint (what its server information calls api:hasServerEndpoint)
      * @param ?list<ApiVersion> $apiVersions the versions this client is willing to speak; all supported ones by default
      * @param int $serverInformationTtl seconds to keep a partner's server information in the cache
+     * @param list<string> $additionalOrigins other origins (scheme://host[:port]) this partner legitimately serves
+     *                                        resources from; the token is sent there too. Empty for almost everyone.
      */
     public function __construct(
         private readonly ClientInterface $http,
@@ -85,11 +90,17 @@ final class OneRecordClient
         ?LoggerInterface $logger = null,
         ?array $apiVersions = null,
         private readonly int $serverInformationTtl = 3600,
+        array $additionalOrigins = [],
     ) {
         if (preg_match('#^https?://#', $serverEndpoint) !== 1) {
             throw new InvalidArgumentException(\sprintf('The server endpoint must be an absolute http(s) URL, got "%s".', $serverEndpoint));
         }
         $this->endpoint = rtrim($serverEndpoint, '/');
+        $origins = [self::originOf($this->endpoint) ?? throw new InvalidArgumentException(\sprintf('The server endpoint "%s" has no usable origin.', $serverEndpoint))];
+        foreach ($additionalOrigins as $origin) {
+            $origins[] = self::originOf($origin) ?? throw new InvalidArgumentException(\sprintf('"%s" is not an origin (scheme://host[:port]).', $origin));
+        }
+        $this->origins = $origins;
         $this->ourVersions = $apiVersions ?? ApiVersion::allDescending();
         $this->logger = $logger ?? new NullLogger();
     }
@@ -413,6 +424,11 @@ final class OneRecordClient
      */
     private function send(string $method, string $url, ?array $body = null, ?ApiVersion $version = null, array $expect = []): ResponseInterface
     {
+        // The token is this partner's; a resource IRI pointing anywhere else must not carry it (AR-001).
+        $origin = self::originOf($url);
+        if ($origin === null || !\in_array($origin, $this->origins, true)) {
+            throw new ClientException(\sprintf('%s is not on %s; this client sends its credentials only to that server (pass additionalOrigins for a partner that serves resources from several hosts).', $url, implode(', ', $this->origins)));
+        }
         $version ??= $this->apiVersion();
         $request = $this->requests->createRequest($method, $url)
             ->withHeader('Accept', self::JSON_LD . '; version=' . $version->value)
@@ -499,7 +515,8 @@ final class OneRecordClient
     private function event(Graph $graph, Iri $iri, Iri $object, ?DateTimeImmutable $fallbackCreated): LogisticsEvent
     {
         $subgraph = new Graph();
-        self::collect($graph, $iri, $subgraph, []);
+        $seen = [];
+        self::collect($graph, $iri, $subgraph, $seen);
         $for = Nodes::iri($subgraph, $iri, Cargo::eventFor);
         $created = Nodes::dateTime($subgraph, $iri, Cargo::creationDate) ?? $fallbackCreated ?? ($this->clock?->now() ?? new DateTimeImmutable('now', new DateTimeZone('UTC')));
 
@@ -507,9 +524,12 @@ final class OneRecordClient
     }
 
     /**
+     * One visited set for the whole walk: a set per branch would terminate cycles but
+     * revisit every shared descendant, which is exponential on a diamond-shaped graph (AR-004).
+     *
      * @param array<string, true> $seen
      */
-    private static function collect(Graph $graph, Iri|BlankNode $node, Graph $into, array $seen): void
+    private static function collect(Graph $graph, Iri|BlankNode $node, Graph $into, array &$seen): void
     {
         $seen[$node->toNTriples()] = true;
         foreach ($graph->about($node) as $triple) {
@@ -537,6 +557,27 @@ final class OneRecordClient
         }
 
         return $object->withGraph($graph);
+    }
+
+    /**
+     * scheme://host:port with the scheme and host lowercased and the default
+     * port spelled out, so "https://A.example" and "https://a.example:443" are
+     * one origin. Null for anything that is not a plain http(s) URL, including
+     * URLs with userinfo, which exist mainly to confuse origin checks.
+     */
+    private static function originOf(string $url): ?string
+    {
+        $parts = parse_url($url);
+        if ($parts === false || !isset($parts['scheme'], $parts['host']) || isset($parts['user'], $parts['pass']) || isset($parts['user'])) {
+            return null;
+        }
+        $scheme = strtolower($parts['scheme']);
+        if (!\in_array($scheme, ['http', 'https'], true)) {
+            return null;
+        }
+        $port = $parts['port'] ?? ($scheme === 'https' ? 443 : 80);
+
+        return $scheme . '://' . strtolower($parts['host']) . ':' . $port;
     }
 
     private static function iri(Iri|string $value): Iri

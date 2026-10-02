@@ -239,4 +239,41 @@ final class OneRecordClientTest extends TestCase
         self::assertSame('application/ld+json; version=2.3.0', $request->getHeaderLine('Content-Type'));
         self::assertStringContainsString('"api:LOGISTICS_OBJECT_UPDATED"', (string) $request->getBody());
     }
+
+    public function testCredentialsGoOnlyToThePartnersOrigin(): void
+    {
+        $this->http->queue($this->serverInformation([ApiVersion::V2_3_0]));
+        $client = $this->client();
+        $client->apiVersion();
+        $foreign = [
+            'https://evil.example/logistics-objects/p',
+            'http://1r.partner.example/logistics-objects/p',
+            'https://1r.partner.example:8443/logistics-objects/p',
+            'https://1r.partner.example.evil.example/logistics-objects/p',
+            'https://user@1r.partner.example/logistics-objects/p',
+            'https://1r.partner.example@evil.example/logistics-objects/p',
+        ];
+        foreach ($foreign as $url) {
+            try {
+                $client->getLogisticsObject($url);
+                self::fail('expected a refusal for ' . $url);
+            } catch (ClientException $e) {
+                self::assertStringContainsString('sends its credentials only to that server', $e->getMessage());
+            }
+        }
+        self::assertCount(1, $this->http->requests, 'nothing left the process for a foreign IRI');
+
+        // Same origin spelled differently is fine; so is an origin the host declared.
+        $this->http->queue(new Response(200, ['Content-Type' => 'application/ld+json; version=2.3.0', 'Revision' => '1', 'Latest-Revision' => '1']));
+        $client->headLogisticsObject('HTTPS://1R.PARTNER.EXAMPLE:443/logistics-objects/p');
+        $factory = new Psr17Factory();
+        $this->http->queue($this->serverInformation([ApiVersion::V2_3_0]));
+        $this->http->queue(new Response(200, ['Content-Type' => 'application/ld+json; version=2.3.0', 'Revision' => '1', 'Latest-Revision' => '1']));
+        $wide = new OneRecordClient($this->http, $factory, $factory, new StaticTokenProvider('tok'), self::PARTNER, additionalOrigins: ['https://objects.partner.example']);
+        $wide->headLogisticsObject('https://objects.partner.example/logistics-objects/p');
+        self::assertSame('Bearer tok', $this->http->lastRequest()->getHeaderLine('Authorization'));
+
+        $this->expectException(InvalidArgumentException::class);
+        new OneRecordClient($this->http, $factory, $factory, new StaticTokenProvider('tok'), self::PARTNER, additionalOrigins: ['ftp://files.partner.example']);
+    }
 }

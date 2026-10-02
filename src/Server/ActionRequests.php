@@ -63,6 +63,7 @@ final class ActionRequests
     public function accept(ActionRequest $request, Iri $by): ActionRequest
     {
         return $this->services->unitOfWork->run(function () use ($request, $by): ActionRequest {
+            $request = $this->current($request);
             $this->assertTransition($request, RequestStatus::Accepted);
             $now = $this->services->clock->now();
             $accepted = $request->withStatus(RequestStatus::Accepted, $now, $by);
@@ -91,6 +92,7 @@ final class ActionRequests
     public function reject(ActionRequest $request, Iri $by, array $errors = []): ActionRequest
     {
         return $this->services->unitOfWork->run(function () use ($request, $by, $errors): ActionRequest {
+            $request = $this->current($request);
             $this->assertTransition($request, RequestStatus::Rejected);
             $rejected = $request->withStatus(RequestStatus::Rejected, $this->services->clock->now(), $by, $errors);
             $this->store($rejected, $request->status);
@@ -102,6 +104,7 @@ final class ActionRequests
     public function acknowledge(ActionRequest $request, Iri $by): ActionRequest
     {
         return $this->services->unitOfWork->run(function () use ($request, $by): ActionRequest {
+            $request = $this->current($request);
             $this->assertTransition($request, RequestStatus::Acknowledged);
             $acknowledged = $request->withStatus(RequestStatus::Acknowledged, $this->services->clock->now(), $by);
             $this->store($acknowledged, $request->status);
@@ -113,6 +116,7 @@ final class ActionRequests
     public function revoke(ActionRequest $request, Iri $by): ActionRequest
     {
         return $this->services->unitOfWork->run(function () use ($request, $by): ActionRequest {
+            $request = $this->current($request);
             $this->assertTransition($request, RequestStatus::Revoked);
             $revoked = $request->withStatus(RequestStatus::Revoked, $this->services->clock->now(), $by);
             if ($request->type === ActionRequestType::AccessDelegation && $request->status === RequestStatus::Accepted) {
@@ -130,6 +134,7 @@ final class ActionRequests
     public function fail(ActionRequest $request, array $errors): ActionRequest
     {
         return $this->services->unitOfWork->run(function () use ($request, $errors): ActionRequest {
+            $request = $this->current($request);
             $this->assertTransition($request, RequestStatus::Failed);
             $failed = $request->withStatus(RequestStatus::Failed, $this->services->clock->now(), null, $errors);
             $this->store($failed, $request->status);
@@ -184,9 +189,18 @@ final class ActionRequests
         }
     }
 
+    /**
+     * The stored state of a request, whatever snapshot the caller holds: a
+     * decision made on a stale copy would otherwise undo a newer one (AR-002).
+     */
+    private function current(ActionRequest $request): ActionRequest
+    {
+        return $this->services->actionRequests->get($request->iri) ?? throw StoreException::notFound($request->iri);
+    }
+
     private function store(ActionRequest $request, RequestStatus $previous): void
     {
-        $this->services->actionRequests->save($request);
+        $this->services->actionRequests->transition($request, $previous);
         $this->services->dispatcher->dispatch(new ActionRequestStatusChanged($request, $previous));
         (new Fanout($this->services))->actionRequestStatusChanged($request);
     }

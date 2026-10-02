@@ -63,7 +63,8 @@ final readonly class Notification
             $about = $graph->about($objectIri);
             if ($about !== []) {
                 $sub = new Graph();
-                self::collect($graph, $objectIri, $sub, []);
+                $seen = [];
+                self::collect($graph, $objectIri, $sub, $seen);
                 $body = new LogisticsObject($objectIri, $sub);
             }
         }
@@ -115,9 +116,12 @@ final readonly class Notification
     }
 
     /**
+     * One visited set for the whole walk: a set per branch would terminate cycles but
+     * revisit every shared descendant, which is exponential on a diamond-shaped graph (AR-004).
+     *
      * @param array<string, true> $seen
      */
-    private static function collect(Graph $graph, Iri|\LambdaTwelve\OneRecord\Rdf\BlankNode $node, Graph $into, array $seen): void
+    private static function collect(Graph $graph, Iri|\LambdaTwelve\OneRecord\Rdf\BlankNode $node, Graph $into, array &$seen): void
     {
         $seen[$node->toNTriples()] = true;
         foreach ($graph->about($node) as $triple) {

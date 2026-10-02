@@ -17,6 +17,7 @@ final class StoreException extends RuntimeException
     public const string ALREADY_EXISTS = 'already_exists';
     public const string REVISION_CONFLICT = 'revision_conflict';
     public const string NOT_FOUND = 'not_found';
+    public const string STATUS_CONFLICT = 'status_conflict';
 
     public function __construct(public readonly string $kind, string $message)
     {
@@ -31,6 +32,11 @@ final class StoreException extends RuntimeException
     public static function revisionConflict(Iri $iri, int $expected, int $actual): self
     {
         return new self(self::REVISION_CONFLICT, \sprintf('"%s" is at revision %d, not %d.', $iri->value, $actual, $expected));
+    }
+
+    public static function statusConflict(Iri $iri, string $expected, string $actual): self
+    {
+        return new self(self::STATUS_CONFLICT, \sprintf('"%s" is %s, not %s.', $iri->value, $actual, $expected));
     }
 
     public static function notFound(Iri $iri): self

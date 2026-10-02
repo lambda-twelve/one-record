@@ -6,6 +6,7 @@ namespace LambdaTwelve\OneRecord\Server\Spi;
 
 use LambdaTwelve\OneRecord\Api\ActionRequest;
 use LambdaTwelve\OneRecord\Api\ActionRequestType;
+use LambdaTwelve\OneRecord\Api\RequestStatus;
 use LambdaTwelve\OneRecord\Rdf\Iri;
 
 /**
@@ -14,7 +15,20 @@ use LambdaTwelve\OneRecord\Rdf\Iri;
  */
 interface ActionRequestStore
 {
+    /**
+     * Stores a new request, or replaces one whole. For a status change use
+     * transition(), which refuses to overwrite a state another worker reached first.
+     */
     public function save(ActionRequest $request): void;
+
+    /**
+     * Replaces the stored request only if its current status is $expectedCurrent:
+     * compare-and-set, so two workers deciding the same request cannot both win
+     * and a stale snapshot cannot overwrite a terminal state.
+     *
+     * @throws StoreException with kind STATUS_CONFLICT when the stored status differs, NOT_FOUND when absent
+     */
+    public function transition(ActionRequest $request, RequestStatus $expectedCurrent): void;
 
     public function get(Iri $iri): ?ActionRequest;
 

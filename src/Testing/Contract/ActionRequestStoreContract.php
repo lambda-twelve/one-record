@@ -22,6 +22,7 @@ use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Rdf\Literal;
 use LambdaTwelve\OneRecord\Server\Spi\ActionRequestStore;
 use LambdaTwelve\OneRecord\Server\Spi\AuditTrailQuery;
+use LambdaTwelve\OneRecord\Server\Spi\StoreException;
 use LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo;
 use PHPUnit\Framework\TestCase;
 
@@ -163,5 +164,31 @@ abstract class ActionRequestStoreContract extends TestCase
         self::assertSame(['d1'], self::ids($store->accepted(ActionRequestType::AccessDelegation)));
         self::assertSame(['c1'], self::ids($store->accepted(ActionRequestType::Change)));
         self::assertSame([], $store->accepted(ActionRequestType::Verification));
+    }
+
+    public function testTransitionIsCompareAndSetOnTheStoredStatus(): void
+    {
+        $store = $this->createStore();
+        $pending = $this->change('c1', '2026-10-02T12:00:00Z');
+        $accepted = $pending->withStatus(RequestStatus::Accepted, new DateTimeImmutable('2026-10-02T12:05:00Z'), new Iri(self::HOLDER));
+        $revoked = $pending->withStatus(RequestStatus::Revoked, new DateTimeImmutable('2026-10-02T12:06:00Z'), new Iri(self::PARTNER));
+
+        try {
+            $store->transition($accepted, RequestStatus::Pending);
+            self::fail('an unknown request cannot transition');
+        } catch (StoreException $e) {
+            self::assertSame(StoreException::NOT_FOUND, $e->kind);
+        }
+        $store->save($pending);
+        $store->transition($accepted, RequestStatus::Pending);
+        self::assertSame(RequestStatus::Accepted, $store->get($pending->iri)?->status);
+
+        try {
+            $store->transition($revoked, RequestStatus::Pending);
+            self::fail('a decision made on a stale snapshot must not win');
+        } catch (StoreException $e) {
+            self::assertSame(StoreException::STATUS_CONFLICT, $e->kind);
+        }
+        self::assertSame(RequestStatus::Accepted, $store->get($pending->iri)->status, 'the stored state is untouched');
     }
 }

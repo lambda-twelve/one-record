@@ -10,6 +10,7 @@ use LambdaTwelve\OneRecord\Api\RequestStatus;
 use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Server\Spi\ActionRequestStore;
 use LambdaTwelve\OneRecord\Server\Spi\AuditTrailQuery;
+use LambdaTwelve\OneRecord\Server\Spi\StoreException;
 
 final class InMemoryActionRequestStore implements ActionRequestStore
 {
@@ -18,6 +19,15 @@ final class InMemoryActionRequestStore implements ActionRequestStore
 
     public function save(ActionRequest $request): void
     {
+        $this->requests[$request->iri->value] = $request;
+    }
+
+    public function transition(ActionRequest $request, RequestStatus $expectedCurrent): void
+    {
+        $current = $this->requests[$request->iri->value] ?? throw StoreException::notFound($request->iri);
+        if ($current->status !== $expectedCurrent) {
+            throw StoreException::statusConflict($request->iri, $expectedCurrent->shortName(), $current->status->shortName());
+        }
         $this->requests[$request->iri->value] = $request;
     }
 
