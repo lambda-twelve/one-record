@@ -48,9 +48,26 @@ final class JwksKeyResolver implements KeyResolver
         if ($keyId !== null && !isset($keys[$keyId])) {
             // Rotation needs one refresh; a stream of forged key ids must not become a stream of
             // fetches against the issuer (AR-025). One refresh per issuer per cooldown.
+            // The cooldown is recorded in the shared cache too: a resolver built per request would
+            // otherwise forget it (R2-010). Suppressing concurrent refreshes needs a lock the host provides.
             $now = microtime(true);
-            if (!isset($this->refreshedAt[$issuer]) || $now - $this->refreshedAt[$issuer] >= $this->refreshCooldownSeconds) {
+            $cooldownKey = 'one-record.jwks-refresh.' . hash('sha256', $issuer);
+            $cooling = isset($this->refreshedAt[$issuer]) && $now - $this->refreshedAt[$issuer] < $this->refreshCooldownSeconds;
+            if (!$cooling && $this->cache !== null) {
+                try {
+                    $cooling = $this->cache->get($cooldownKey) !== null;
+                } catch (Throwable) {
+                    $cooling = false;
+                }
+            }
+            if (!$cooling) {
                 $this->refreshedAt[$issuer] = $now;
+                if ($this->cache !== null) {
+                    try {
+                        $this->cache->set($cooldownKey, $now, max(1, $this->refreshCooldownSeconds));
+                    } catch (Throwable) {
+                    }
+                }
                 $keys = $this->load($issuer, refresh: true);
             }
         }

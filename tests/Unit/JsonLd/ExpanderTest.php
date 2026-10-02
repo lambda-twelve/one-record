@@ -304,4 +304,27 @@ final class ExpanderTest extends TestCase
         $viaAlias = JsonLd::expand(['@context' => ['cargo' => self::CARGO, 'link' => ['@id' => 'cargo:goodsDescription', '@type' => '@id']], '@id' => 'https://example/p', 'link' => 'https://example/text']);
         self::assertInstanceOf(Iri::class, $viaAlias->graph->firstObject(new Iri('https://example/p'), self::CARGO . 'goodsDescription'), 'the alias itself still coerces');
     }
+
+    public function testR2008DateTimesFollowTheXsdGrammarRanges(): void
+    {
+        $parse = static fn(string $v): ?string => \LambdaTwelve\OneRecord\JsonLd\Nodes::parseDateTime($v)?->format('Y-m-d\TH:i:s.vP');
+        self::assertNull($parse('2026-10-02T12:00:60Z'), 'seconds stop at 59');
+        self::assertNull($parse('2026-10-02T12:60:00Z'));
+        self::assertNull($parse('2026-10-02T25:00:00Z'));
+        self::assertNull($parse('2026-10-02T12:00:00+14:59'), 'offsets stop at 14:00');
+        self::assertNull($parse('2026-10-02T12:00:00+15:00'));
+        self::assertNull($parse('2026-02-30T12:00:00Z'));
+        self::assertNull($parse('2026-10-02T24:00:01Z'), '24:00:00 only');
+        self::assertSame('2026-10-03T00:00:00.000+00:00', $parse('2026-10-02T24:00:00Z'), 'end of day is the next midnight');
+        self::assertSame('2026-10-02T12:00:00.000+14:00', $parse('2026-10-02T12:00:00+14:00'));
+        self::assertSame('2024-02-29T23:59:59.500+00:00', $parse('2024-02-29T23:59:59.5Z'));
+        self::assertSame('2026-10-02T12:00:00.000+00:00', $parse('2026-10-02T12:00:00'), 'no zone is still a valid lexical form');
+    }
+
+    public function testR2009NetworkPathReferencesAreNormalisedToo(): void
+    {
+        $context = ['cargo' => self::CARGO, '@base' => 'https://example/a/b'];
+        self::assertSame('https://other.example/y', JsonLd::expand(['@context' => $context, '@id' => '//other.example/x/../y', '@type' => 'cargo:Piece'])->rootIri()?->value);
+        self::assertSame('https://other.example/y?q=1#f', JsonLd::expand(['@context' => $context, '@id' => '//other.example/./y?q=1#f', '@type' => 'cargo:Piece'])->rootIri()?->value);
+    }
 }

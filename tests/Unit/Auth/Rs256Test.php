@@ -248,7 +248,7 @@ final class Rs256Test extends TestCase
         // A token signed with a rotated key: one refresh, then success.
         self::assertSame(self::ISSUER, $verifier->verify($signer2->sign([], 60))->issuer());
         self::assertCount(2, $http->requests);
-        self::assertSame(2, $cache->writes);
+        self::assertSame(3, $cache->writes, 'the refreshed keys and the refresh cooldown marker (R2-010)');
 
         self::assertSame([], $resolver->publicKeys('https://unknown.example', null));
         self::assertCount(2, $http->requests, 'untrusted issuers are never fetched');

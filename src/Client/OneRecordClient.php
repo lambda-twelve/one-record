@@ -207,13 +207,14 @@ final class OneRecordClient
         }
         $url = $iri->value . ($query === [] ? '' : '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986));
         $response = $this->send('GET', $url);
-        $object = $this->parse(static function () use ($response, $iri, $url, $query): LogisticsObject {
+        $object = $this->parse(static function () use ($response, $iri, $query): LogisticsObject {
             // The body must be about the object asked for. A historical read may be rooted at
             // the "<iri>?at=…" URL instead; nothing else is accepted (AR-017).
             $document = JsonLd::expand(self::body($response), $iri);
             $allowed = [$iri->value];
             if (isset($query['at'])) {
-                $allowed[] = $url;
+                // The historical identity carries the instant only; embedded=true is presentation, not identity (R2-003).
+                $allowed[] = $iri->value . '?at=' . $query['at'];
             }
             if (!$document->root instanceof Iri || !\in_array($document->root->value, $allowed, true)) {
                 throw new ClientException(\sprintf('Asked for %s, the server answered with a document about %s.', $iri->value, $document->root instanceof Iri ? $document->root->value : 'an unidentified node'));

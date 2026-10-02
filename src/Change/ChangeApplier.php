@@ -15,6 +15,7 @@ use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Rdf\Literal;
 use LambdaTwelve\OneRecord\Rdf\Term;
 use LambdaTwelve\OneRecord\Rdf\Triple;
+use LambdaTwelve\OneRecord\Vocabulary\Generated\Api;
 use LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo;
 use LambdaTwelve\OneRecord\Vocabulary\PropertyKind;
 use LambdaTwelve\OneRecord\Vocabulary\Vocabulary;
@@ -62,6 +63,10 @@ final class ChangeApplier
             }
             if ($operation->predicate->value === Graph::RDF_TYPE && $operation->subject->equals($current->iri)) {
                 $errors[] = Error::of('Invalid resource', '400', 'The type of a logistics object cannot be changed.', Graph::RDF_TYPE, $current->iri->value);
+            }
+            if (str_starts_with($operation->predicate->value, \LambdaTwelve\OneRecord\Spec\Namespaces::API)) {
+                // Revision counters and anything else in the API namespace are the server's to write (R2-006).
+                $errors[] = Error::of('Invalid resource', '400', \sprintf('%s is set by the server, not through a change.', $operation->predicate->value), $operation->predicate->value, $current->iri->value);
             }
         }
         if ($errors !== []) {
@@ -270,7 +275,8 @@ final class ChangeApplier
             }
             foreach ($graph->about($subject) as $triple) {
                 $predicate = $triple->predicate->value;
-                if ($predicate === Graph::RDF_TYPE || str_starts_with($predicate, \LambdaTwelve\OneRecord\Spec\Namespaces::API)) {
+                if ($predicate === Graph::RDF_TYPE || \in_array($predicate, [Api::hasRevision, Api::hasLatestRevision], true)) {
+                    // The two revision properties are metadata a stored object may legitimately carry; no other API term is.
                     continue;
                 }
                 $info = $this->vocabulary->property($predicate);

@@ -16,6 +16,7 @@ use LambdaTwelve\OneRecord\Server\IllegalTransition;
 use LambdaTwelve\OneRecord\Server\Spi\Action;
 use LambdaTwelve\OneRecord\Server\Spi\Agent;
 use LambdaTwelve\OneRecord\Server\Spi\Decision;
+use LambdaTwelve\OneRecord\Server\Spi\StoreException;
 use LambdaTwelve\OneRecord\Spec\ApiFeatures;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -47,7 +48,10 @@ final class ActionRequestEndpoint extends AbstractEndpoint
         if ($method === 'DELETE') {
             // Being a party lets you read a request; revoking it is the requestor's right, or the
             // policy's call. A delegate of a shared delegation must not be able to cut off the others (AR-028).
-            if (!$agent->is($actionRequest->requestedBy)) {
+            // The spec tells a subscriber to revoke its SubscriptionRequest to unsubscribe, even when a
+            // third party created it (spec question 30); a delegate of a shared delegation gets no such right.
+            $subscriber = $actionRequest->payload instanceof Subscription && $agent->is($actionRequest->payload->subscriber);
+            if (!$agent->is($actionRequest->requestedBy) && !$subscriber) {
                 $this->decide($agent, Action::RevokeActionRequest, $iri);
             }
 
@@ -97,6 +101,12 @@ final class ActionRequestEndpoint extends AbstractEndpoint
             throw ApiFeatures::available($negotiated->version, ApiFeatures::REVOCATION_422)
                 ? HttpException::unprocessable($e->getMessage(), null)
                 : HttpException::badRequest($e->getMessage(), null, 'Invalid resource');
+        } catch (StoreException $e) {
+            if ($e->kind !== StoreException::STATUS_CONFLICT) {
+                throw $e;
+            }
+            // Another worker decided first: the unit of work has unwound, the client retries against the new state (R2-012).
+            throw HttpException::conflict($e->getMessage(), $actionRequest->iri->value);
         }
 
         return $this->services->responder->empty(204, $negotiated, ['Location' => $actionRequest->iri->value, 'Type' => $actionRequest->type->value]);

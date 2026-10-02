@@ -9,10 +9,12 @@ use LambdaTwelve\OneRecord\Api\Error;
 use RuntimeException;
 
 /**
- * The holder's own change was accepted and could not be applied: the request
- * is recorded as REQUEST_FAILED with these errors, no revision was written.
- * Thrown from DataHolder::change(), update() and publish() so the caller, and
- * its unit of work, see a failure instead of a request object to inspect.
+ * The holder's own change was accepted and could not be applied; no revision
+ * was written. Thrown from DataHolder::change(), update() and publish() so the
+ * caller, and its unit of work, see a failure instead of a request object to
+ * inspect. The request carried here is diagnostic: it was saved as
+ * REQUEST_FAILED inside the unit of work, so a transactional host rolls it
+ * back with everything else, while the identity unit of work keeps it.
  */
 final class ChangeFailed extends RuntimeException
 {

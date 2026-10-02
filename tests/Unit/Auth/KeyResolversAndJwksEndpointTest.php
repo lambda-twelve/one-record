@@ -138,4 +138,23 @@ final class KeyResolversAndJwksEndpointTest extends TestCase
         }
         self::assertCount(2, $http->requests, 'one fetch to warm up, one refresh for the first unknown key id, then the cooldown holds');
     }
+
+    public function testR2010TheCooldownSurvivesResolverReconstruction(): void
+    {
+        $factory = new Psr17Factory();
+        $signer = new Rs256Signer(TestKeys::pair('jwks')['private'], 'https://idp.example', new FixedClock(), 'k1');
+        $jwks = json_encode(['keys' => [$signer->publicJwk()]], JSON_THROW_ON_ERROR);
+        $http = new FakeHttpClient();
+        for ($i = 0; $i < 7; $i++) {
+            $http->queue(new Response(200, [], $jwks));
+        }
+        $cache = new \LambdaTwelve\OneRecord\Testing\ArrayCache();
+        $make = static fn(): JwksKeyResolver => new JwksKeyResolver(['https://idp.example' => 'https://idp.example/jwks'], $http, $factory, $cache);
+
+        self::assertCount(1, $make()->publicKeys('https://idp.example', 'k1'), 'warm-up');
+        foreach (['bogus1', 'bogus2', 'bogus3', 'bogus4', 'bogus5'] as $kid) {
+            $make()->publicKeys('https://idp.example', $kid);
+        }
+        self::assertCount(2, $http->requests, 'one refresh for the first unknown key id; later request-scoped resolvers see the cooldown in the cache');
+    }
 }

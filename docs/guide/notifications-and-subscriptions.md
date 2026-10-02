@@ -28,7 +28,7 @@ foreach ($outbox->drain() as $outbound) {
     // from your partner registry, or fall back to the spec's derivation.
     $endpoint = $partners->endpointOf($outbound->recipient) ?? $outbound->suggestedEndpoint();
     $client = $clients->for($endpoint);   // one OneRecordClient per partner, cached
-    $client->sendNotification($outbound->notification);
+    $client->sendNotification($outbound->notification, idempotencyKey: $outbound->id);
 }
 ```
 

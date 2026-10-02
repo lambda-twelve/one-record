@@ -77,7 +77,7 @@ final class DataHolder
     /**
      * Apply a change of the holder's own making: created and accepted at once.
      *
-     * @throws ChangeFailed when the change could not be applied; the request stays recorded as failed
+     * @throws ChangeFailed when the change could not be applied; the failed request is kept only if the unit of work commits it
      */
     public function change(Change $change): ActionRequest
     {

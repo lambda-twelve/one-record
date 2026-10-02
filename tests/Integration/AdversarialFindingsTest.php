@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace LambdaTwelve\OneRecord\Tests\Integration;
 
+use DateTimeImmutable;
 use LambdaTwelve\OneRecord\Api\AccessDelegation;
+use LambdaTwelve\OneRecord\Api\ActionRequest;
 use LambdaTwelve\OneRecord\Api\Permission;
 use LambdaTwelve\OneRecord\Api\RequestStatus;
 use LambdaTwelve\OneRecord\Rdf\Iri;
@@ -233,5 +235,102 @@ final class AdversarialFindingsTest extends ServerTestCase
         self::assertSame(Decision::Allow, $this->server->policy->decide(new Agent(new Iri(self::STRANGER)), Action::ReadLogisticsObject, $piece->iri), 'the other delegate keeps its access');
 
         self::assertSame(204, $this->request('DELETE', $path, self::HOLDER)->getStatusCode(), 'the requestor revokes');
+    }
+
+    public function testR2003HistoricalReadsWithEmbeddingAreAccepted(): void
+    {
+        $piece = $this->storePiece();
+        $factory = new \Nyholm\Psr7\Factory\Psr17Factory();
+        $client = new \LambdaTwelve\OneRecord\Client\OneRecordClient(new \LambdaTwelve\OneRecord\Testing\InProcessHttpClient($this->server->handler, $factory, $factory), $factory, $factory, new \LambdaTwelve\OneRecord\Client\StaticTokenProvider(self::PARTNER), self::BASE, clock: $this->clock);
+
+        foreach ([false, true] as $embedded) {
+            $read = $client->getLogisticsObject($piece->iri, new DateTimeImmutable('2026-10-02T12:00:00Z'), $embedded);
+            self::assertSame($piece->iri->value . '?at=20261002T120000Z', $read->object?->iri->value);
+            self::assertSame(1, $read->revision);
+        }
+    }
+
+    public function testR2004ASubscriberMayEndASubscriptionAThirdPartyCreated(): void
+    {
+        $piece = $this->storePiece('piece-1', null);
+        $holder = new DataHolder($this->server->services);
+        // Created by the holder on behalf of the partner: requestor and subscriber differ.
+        $request = (new ActionRequests($this->server->services))->create(new \LambdaTwelve\OneRecord\Api\Subscription(new Iri(self::PARTNER), \LambdaTwelve\OneRecord\Api\TopicType::Identifier, $piece->iri->value, [\LambdaTwelve\OneRecord\Api\SubscriptionEventType::LogisticsObjectUpdated]), new Iri(self::HOLDER));
+        $holder->accept($request->iri);
+        $path = substr($request->iri->value, \strlen(self::BASE));
+
+        self::assertError($this->request('DELETE', $path, self::STRANGER), 403);
+        self::assertSame(204, $this->request('DELETE', $path, self::PARTNER)->getStatusCode(), 'the subscriber unsubscribes (spec question 30)');
+        self::assertSame(RequestStatus::Revoked, $this->server->actionRequests->get($request->iri)?->status);
+    }
+
+    public function testR2006ChangesMayNotWriteServerMetadata(): void
+    {
+        $piece = $this->storePiece();
+        $applier = new \LambdaTwelve\OneRecord\Change\ChangeApplier();
+        foreach ([
+            \LambdaTwelve\OneRecord\Change\Operation::add($piece->iri, new Iri(\LambdaTwelve\OneRecord\Vocabulary\Generated\Api::hasRevision), new \LambdaTwelve\OneRecord\Change\OperationObject(\LambdaTwelve\OneRecord\Rdf\Literal::XSD_INTEGER, '999')),
+            \LambdaTwelve\OneRecord\Change\Operation::add($piece->iri, new Iri(\LambdaTwelve\OneRecord\Spec\Namespaces::API . 'notAnOntologyProperty'), new \LambdaTwelve\OneRecord\Change\OperationObject(\LambdaTwelve\OneRecord\Rdf\Literal::XSD_STRING, 'arbitrary')),
+        ] as $operation) {
+            try {
+                $applier->apply($piece, 1, new \LambdaTwelve\OneRecord\Change\Change($piece->iri, 1, [$operation]));
+                self::fail('API-namespace predicates are the server\'s');
+            } catch (\LambdaTwelve\OneRecord\Change\ChangeRejected $e) {
+                self::assertStringContainsString('set by the server', $e->errors[0]->details[0]->message ?? '');
+            }
+        }
+        // An object that already carries revision metadata still accepts an ordinary change.
+        $withMetadata = $piece->withGraph(new \LambdaTwelve\OneRecord\Rdf\Graph([...$piece->graph, new \LambdaTwelve\OneRecord\Rdf\Triple($piece->iri, new Iri(\LambdaTwelve\OneRecord\Vocabulary\Generated\Api::hasRevision), \LambdaTwelve\OneRecord\Rdf\Literal::integer(1))]));
+        $result = $applier->apply($withMetadata, 1, new \LambdaTwelve\OneRecord\Change\Change($piece->iri, 1, [\LambdaTwelve\OneRecord\Change\Operation::add($piece->iri, new Iri(\LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo::goodsDescription), new \LambdaTwelve\OneRecord\Change\OperationObject(\LambdaTwelve\OneRecord\Rdf\Literal::XSD_STRING, 'More books'))]));
+        self::assertSame([\LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo::goodsDescription], $result->changedProperties);
+    }
+
+    public function testR2012ALosingWorkersConflictIsA409(): void
+    {
+        $inner = $this->server->actionRequests;
+        $conflicting = new class ($inner) implements \LambdaTwelve\OneRecord\Server\Spi\ActionRequestStore {
+            public function __construct(private readonly \LambdaTwelve\OneRecord\Server\Spi\ActionRequestStore $inner) {}
+
+            public function save(ActionRequest $request): void
+            {
+                $this->inner->save($request);
+            }
+
+            public function transition(ActionRequest $request, RequestStatus $expectedCurrent): void
+            {
+                throw \LambdaTwelve\OneRecord\Server\Spi\StoreException::statusConflict($request->iri, $expectedCurrent->shortName(), 'REQUEST_ACCEPTED');
+            }
+
+            public function get(Iri $iri): ?ActionRequest
+            {
+                return $this->inner->get($iri);
+            }
+
+            public function auditTrail(Iri $logisticsObject, \LambdaTwelve\OneRecord\Server\Spi\AuditTrailQuery $query): array
+            {
+                return $this->inner->auditTrail($logisticsObject, $query);
+            }
+
+            public function pendingChanges(Iri $logisticsObject): array
+            {
+                return $this->inner->pendingChanges($logisticsObject);
+            }
+
+            public function accepted(\LambdaTwelve\OneRecord\Api\ActionRequestType $type): array
+            {
+                return $this->inner->accepted($type);
+            }
+        };
+        $unit = new \LambdaTwelve\OneRecord\Testing\RecordingUnitOfWork();
+        $services = new \LambdaTwelve\OneRecord\Server\Services($this->server->services->config, $this->server->objects, $this->server->events, $conflicting, $this->server->subscriptions, $this->server->delegations, $this->server->outbox, new \LambdaTwelve\OneRecord\Testing\HeaderAuthenticator(), $this->server->policy, $this->clock, $this->dispatcher, new \Nyholm\Psr7\Factory\Psr17Factory(), new \Nyholm\Psr7\Factory\Psr17Factory(), unitOfWork: $unit);
+        $handler = \LambdaTwelve\OneRecord\Server\ServerBuilder::build($services);
+        $piece = $this->storePiece('piece-1', null);
+        $pending = (new ActionRequests($this->server->services))->create(new \LambdaTwelve\OneRecord\Api\Subscription(new Iri(self::PARTNER), \LambdaTwelve\OneRecord\Api\TopicType::Identifier, $piece->iri->value, [\LambdaTwelve\OneRecord\Api\SubscriptionEventType::LogisticsObjectUpdated]), new Iri(self::PARTNER));
+
+        $response = $handler->handle(new \Nyholm\Psr7\ServerRequest('PATCH', $pending->iri->value . '?status=REQUEST_REJECTED', ['Accept' => 'application/ld+json; version=2.3.0', 'X-Test-Agent' => self::HOLDER]));
+
+        self::assertSame(409, $response->getStatusCode(), (string) $response->getBody());
+        self::assertSame('api:Error', self::json($response)['@type']);
+        self::assertSame(1, $unit->rolledBack, 'the unit of work unwound before the answer');
     }
 }

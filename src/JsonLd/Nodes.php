@@ -137,16 +137,37 @@ final class Nodes
      */
     public static function parseDateTime(string $lexical): ?DateTimeImmutable
     {
-        if (preg_match('/^-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/', $lexical) !== 1) {
+        // XML Schema 1.1 dateTime: ranges checked here, because PHP would normalise 12:00:60 to 12:01:00
+        // and 2026-02-30 to March, and an offset of +14:59 is outside the datatype (R2-008).
+        if (preg_match('/^(-?\d{4,})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|([+-])(\d{2}):(\d{2}))?$/', $lexical, $m) !== 1) {
             return null;
         }
+        [$year, $month, $day, $hour, $minute, $second] = [(int) $m[1], (int) $m[2], (int) $m[3], (int) $m[4], (int) $m[5], (int) $m[6]];
+        $fraction = $m[7] ?? '';
+        if (!checkdate($month, $day, $year) || $minute > 59 || $second > 59) {
+            return null;
+        }
+        $endOfDay = $hour === 24;
+        if ($hour > 24 || ($endOfDay && ($minute !== 0 || $second !== 0 || ltrim($fraction, '.0') !== ''))) {
+            return null;
+        }
+        $zone = $m[8] ?? '';
+        if ($zone !== '' && $zone !== 'Z') {
+            $offsetHours = (int) ($m[10] ?? '0');
+            $offsetMinutes = (int) ($m[11] ?? '0');
+            if ($offsetHours > 14 || $offsetMinutes > 59 || ($offsetHours === 14 && $offsetMinutes !== 0)) {
+                return null;
+            }
+        }
         try {
-            $parsed = new DateTimeImmutable($lexical);
+            // A zoneless value has no timezone in XSD; UTC is the only reading that does not depend on the host.
+            $parsed = new DateTimeImmutable(\sprintf('%s-%02d-%02dT%02d:%02d:%02d%s%s', $m[1], $month, $day, $endOfDay ? 0 : $hour, $minute, $second, $fraction, $zone === '' ? 'Z' : $zone));
         } catch (Exception) {
             return null;
         }
-        // PHP rolls invalid calendar dates over (2026-02-30 becomes March); the spec's grammar does not.
-        return str_starts_with($parsed->format('Y-m-d'), substr($lexical, 0, 10)) ? $parsed : null;
+
+        // 24:00:00 is the end of the day, which is midnight starting the next one.
+        return $endOfDay ? $parsed->modify('+1 day') : $parsed;
     }
 
     /**

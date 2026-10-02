@@ -174,7 +174,14 @@ final readonly class Context
         }
         $authority = isset($b['host']) ? '//' . (isset($b['user']) ? $b['user'] . (isset($b['pass']) ? ':' . $b['pass'] : '') . '@' : '') . $b['host'] . (isset($b['port']) ? ':' . $b['port'] : '') : '';
         if (str_starts_with($reference, '//')) {
-            return $b['scheme'] . ':' . $reference;
+            // The reference supplies the authority; its path still gets dot-segment removal (RFC 3986 §5.2.2, R2-009).
+            $n = parse_url($b['scheme'] . ':' . $reference);
+            if ($n === false || !isset($n['host'])) {
+                return $b['scheme'] . ':' . $reference;
+            }
+            $networkAuthority = '//' . (isset($n['user']) ? $n['user'] . (isset($n['pass']) ? ':' . $n['pass'] : '') . '@' : '') . $n['host'] . (isset($n['port']) ? ':' . $n['port'] : '');
+
+            return $b['scheme'] . ':' . $networkAuthority . self::removeDotSegments($n['path'] ?? '') . (isset($n['query']) ? '?' . $n['query'] : '') . (isset($n['fragment']) ? '#' . $n['fragment'] : '');
         }
         $r = parse_url($reference);
         if ($r === false) {
@@ -182,7 +189,7 @@ final readonly class Context
         }
         $basePath = $b['path'] ?? '';
         if ($reference === '' || str_starts_with($reference, '#')) {
-            return $b['scheme'] . ':' . $authority . $basePath . (isset($b['query']) ? '?' . $b['query'] : '') . $reference;
+            return $b['scheme'] . ':' . $authority . self::removeDotSegments($basePath) . (isset($b['query']) ? '?' . $b['query'] : '') . $reference;
         }
         if (str_starts_with($reference, '?')) {
             return $b['scheme'] . ':' . $authority . $basePath . $reference;
@@ -192,9 +199,19 @@ final readonly class Context
             $directory = $authority !== '' && $basePath === '' ? '/' : substr($basePath, 0, (int) strrpos($basePath, '/') + 1);
             $path = $directory . $path;
         }
-        // Remove dot segments (RFC 3986 §5.2.4).
+        return $b['scheme'] . ':' . $authority . self::removeDotSegments($path) . (isset($r['query']) ? '?' . $r['query'] : '') . (isset($r['fragment']) ? '#' . $r['fragment'] : '');
+    }
+
+    /**
+     * RFC 3986 §5.2.4.
+     */
+    private static function removeDotSegments(string $path): string
+    {
+        if ($path === '') {
+            return '';
+        }
         $output = [];
-        foreach (explode('/', $path) as $i => $segment) {
+        foreach (explode('/', $path) as $segment) {
             if ($segment === '.') {
                 continue;
             }
@@ -211,7 +228,7 @@ final readonly class Context
             $resolved .= '/';
         }
 
-        return $b['scheme'] . ':' . $authority . $resolved . (isset($r['query']) ? '?' . $r['query'] : '') . (isset($r['fragment']) ? '#' . $r['fragment'] : '');
+        return $resolved;
     }
 
     /**
