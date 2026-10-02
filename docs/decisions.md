@@ -81,3 +81,15 @@ was built for; lifecycle decisions are compare-and-set on the stored state,
 never on a caller's snapshot; and rendering a document for an older edition
 may drop a property, but requesting an authorisation may never silently
 widen it.
+
+A second round on the remediated tree found no new high findings but showed
+that four first-round fixes had been too narrow or too wide (R2-003, R2-004,
+R2-006, R2-012) and that the canonical labelling was still not a canonical
+form (R2-001). Two further rules follow. A fix is checked against the
+reviewer's reproducer *and* against the neighbouring option it did not
+exercise (historical and embedded, excluded and generic ranges, metadata
+present and metadata written), because a patch shaped to one reproducer is
+how the regressions arrived. And where a correct answer needs a search, the
+search is exhaustive under a budget and the budget's exhaustion is an error
+the caller sees (`ComparisonBudgetExceeded`), never a silent fallback to a
+heuristic.

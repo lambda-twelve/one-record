@@ -119,6 +119,21 @@ it. From 1.0.0 on, breaking changes need a new major version.
   or the policy may revoke; reference stores keep snapshots; position-aware
   JSON-LD compaction, RFC 3986 `@base` resolution, term-scoped coercion and
   labelled blank roots.
+- Second adversarial round (2026-10-03), again one regression test per
+  finding: canonical blank-node labels by exhaustive individualisation search
+  (`ComparisonBudgetExceeded` when a graph is too symmetric, instead of a
+  guess); the writer uses a term alias only when its coercion fits the values
+  and never writes a node id as a bare prefix; historical reads with
+  `embedded=true` accepted by the client; a subscriber may revoke a
+  SubscriptionRequest a third party created (spec question 30); the in-memory
+  event store and outbox keep snapshots, with contract tests; changes may not
+  write API-namespace properties and final validation tolerates only the two
+  revision properties; content negotiation evaluates every served version
+  against the most specific matching range; `xsd:dateTime` ranges checked,
+  `24:00:00` accepted as the next midnight; dot-segment removal for
+  network-path references; the JWKS refresh cooldown kept in the shared
+  cache; a shared embedded node introduced once in a change; a store's status
+  conflict answers 409.
 - `Server\Spi\Authenticator` and `Server\Spi\Agent`.
 - Interoperability suite (`tests/Interop/`): NE:ONE built from source at a
   pinned commit as a comparison oracle; the same graph published to both
