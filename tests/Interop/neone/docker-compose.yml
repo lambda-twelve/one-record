@@ -1,0 +1,53 @@
+# NE:ONE for the interoperability suite. Started by tests/Interop/run.sh,
+# which generates the RS256 key pair the tests sign tokens with and mounts
+# its public half as the only key NE:ONE trusts.
+#
+# Variables (run.sh sets them; defaults suit a local run from DDEV):
+#   NEONE_IMAGE        a prebuilt image to use instead of building (optional)
+#   NEONE_PORT         host port (default 18080)
+#   NEONE_PUBLIC_HOST  the host name NE:ONE puts in the URIs it mints; must be
+#                      what the tests use to reach it (default host.docker.internal)
+#   NEONE_ISSUER       the issuer the tests' tokens carry
+#   NEONE_KEYS_DIR     directory holding public.pem (default ../../../.cache/interop/keys)
+
+name: one-record-interop
+
+services:
+  neone:
+    image: ${NEONE_IMAGE:-one-record-interop-neone:local}
+    build:
+      context: .
+    ports:
+      - "${NEONE_PORT:-18080}:8080"
+    environment:
+      LO_ID_CONFIG_HOST: ${NEONE_PUBLIC_HOST:-host.docker.internal}
+      LO_ID_CONFIG_SCHEME: http
+      LO_ID_CONFIG_PORT: "${NEONE_PORT:-18080}"
+      # Both issuer slots of NE:ONE's baseline configuration point at our key, so no demo issuer stays trusted.
+      AUTH_VALID_ISSUERS_LOCAL: ${NEONE_ISSUER:-https://interop.one-record.test}
+      AUTH_ISSUERS_LOCAL_PUBLICKEY_LOCATION: /run/keys/public.pem
+      AUTH_VALID_ISSUERS_LOCAL2: ${NEONE_ISSUER:-https://interop.one-record.test}
+      AUTH_ISSUERS_LOCAL2_PUBLICKEY_LOCATION: /run/keys/public.pem
+      QUARKUS_LOG_CATEGORY__IO_SMALLRYE_JWT__LEVEL: INFO
+    volumes:
+      - ${NEONE_KEYS_DIR:-../../../.cache/interop/keys}:/run/keys:ro
+      - neone-rdf4j:/var/lib/neone/rdf4j
+    healthcheck:
+      # The image has no curl; bash's /dev/tcp does the request (CMD-SHELL would run dash, which lacks it).
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8080
+          && printf 'GET /q/health/ready HTTP/1.0\r\n\r\n' >&3
+          && grep -q '"status": "UP"' <&3
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 20s
+    tmpfs:
+      - /tmp
+
+volumes:
+  neone-rdf4j:

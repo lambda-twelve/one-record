@@ -28,6 +28,7 @@ ddev coverage        # PHPUnit with code coverage (report in .cache/coverage)
 ddev cs              # code style check (ddev cs fix to apply)
 ddev vocab           # regenerate the vocabulary and show any diff
 ddev compliance      # run the newman compliance collection against bin/serve
+ddev interop         # start NE:ONE in Docker and run the interoperability suite
 ddev docs            # preview the documentation site
 ```
 

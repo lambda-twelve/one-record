@@ -1,0 +1,15 @@
+The interoperability suite of lambda-twelve/one-record runs NE:ONE (opeN
+sourcE: ONE record server software), unmodified, as a separate container, to
+compare its answers with this package's.
+
+NE:ONE is an initiative of the Digital Testbed Air Cargo (DTAC), funded by the
+German Federal Ministry for Digital and Transport, published by the Open
+Logistics Foundation:
+  https://git.openlogisticsfoundation.org/wg-digitalaircargo/ne-one
+
+It is licensed under the Open Logistics Foundation License 1.3, a copy of which
+is included as NE-ONE-LICENSE-OLFL-1.3. This image is built from the upstream
+source at the commit recorded in its org.opencontainers.image.revision label.
+No NE:ONE file has been modified; all copyright, patent, trademark and
+attribution notices of the upstream source are retained. No NE:ONE source is
+part of lambda-twelve/one-record.

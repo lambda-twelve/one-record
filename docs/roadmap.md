@@ -13,8 +13,8 @@ Status: :white_check_mark: done, :construction: in progress, :hourglass: planned
 | 5 | Server: SPI, in-memory stores, every API 2.2/2.3 endpoint, action-request lifecycle, notification fan-out, `bin/serve` | :white_check_mark: |
 | 6 | Compliance collection (newman) run for API 2.2.0 and 2.3.0 in CI | :white_check_mark: |
 | 7 | Client over PSR-18 with server-information discovery and version selection | :white_check_mark: |
-| 8 | Interoperability suite against NE:ONE as an RDF comparison oracle | :construction: |
-| 9 | Documentation complete, first release 1.0.0-beta1 | :hourglass: |
+| 8 | Interoperability suite against NE:ONE as an RDF comparison oracle | :white_check_mark: |
+| 9 | Documentation complete, first release 1.0.0-beta1 | :construction: |
 
 ## Release numbering
 

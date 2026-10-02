@@ -85,6 +85,13 @@ it. From 1.0.0 on, breaking changes need a new major version.
 - `bin/serve`: the in-memory server under PHP's built-in web server with an
   OAuth 2.0 token endpoint, for development and the compliance collection.
 - `Server\Spi\Authenticator` and `Server\Spi\Agent`.
+- Interoperability suite (`tests/Interop/`): NE:ONE built from source at a
+  pinned commit as a comparison oracle; the same graph published to both
+  servers and compared as RDF, plus changes, events and access delegations.
+  Findings: the JSON-LD reader accepts a top-level `@graph` (NE:ONE's
+  flattened answers), the comparer canonicalises `xsd:dateTime` and the
+  bounded integer types, and `ChangeBuilder` ignores inferred superclass
+  types when diffing.
 - `Client`: `OneRecordClient` over PSR-18 for every endpoint of a partner's
   server, with server-information discovery, API version negotiation
   (highest common version, 2.3-only properties optional on read), typed

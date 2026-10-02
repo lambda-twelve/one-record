@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+## Description: Start NE:ONE in Docker and run the interoperability suite from the web container
+## Usage: interop [phpunit args]
+## Example: "ddev interop" or "NEONE_IMAGE=one-record-interop-neone:local ddev interop"
+#
+# Docker Compose runs on the host; PHPUnit runs inside the web container,
+# which reaches the NE:ONE container through host.docker.internal.
+set -euo pipefail
+cd "$(dirname "$0")/../../.."
+export NEONE_PUBLIC_HOST="${NEONE_PUBLIC_HOST:-host.docker.internal}"
+PHPUNIT="ddev exec env ONE_RECORD_NEONE_URL=http://${NEONE_PUBLIC_HOST}:${NEONE_PORT:-18080} ONE_RECORD_NEONE_ISSUER=${NEONE_ISSUER:-https://interop.one-record.test} ONE_RECORD_NEONE_PRIVATE_KEY=.cache/interop/keys/private.pem vendor/bin/phpunit" \
+    exec bash tests/Interop/run.sh "$@"

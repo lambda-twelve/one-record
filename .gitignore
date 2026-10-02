@@ -12,3 +12,5 @@ composer.lock
 /.cache/
 coverage.xml
 coverage.json
+# Wrapper authors' review notes: local input, acted on through the changelog and docs.
+/review/
