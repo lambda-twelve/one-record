@@ -103,6 +103,10 @@ final class ChangeApplier
         }
 
         $this->removeOrphans($graph, $current->iri);
+        $this->validateGraph($graph, $current->iri, $minted, $errors);
+        if ($errors !== []) {
+            throw new ChangeRejected($errors);
+        }
         $changed = $this->changedProperties($change, $current->iri, $current->graph, $graph, $minted);
 
         return new ChangeResult(new LogisticsObject($current->iri, $graph), $changed);
@@ -216,31 +220,8 @@ final class ChangeApplier
     {
         $term = $this->objectTerm($operation, $minted);
         $predicate = $operation->predicate->value;
-        $types = array_map(static fn(Iri $t): string => $t->value, $graph->typesOf($subject));
-
-        if ($predicate !== Graph::RDF_TYPE && $types !== []) {
-            $info = $this->vocabulary->property($predicate);
-            if ($info === null) {
-                $errors[] = Error::of('Invalid resource', '400', \sprintf('"%s" is not a property of the ontology.', $predicate), $predicate);
-
-                return;
-            }
-            if (!$this->vocabulary->accepts($types, $predicate)) {
-                $errors[] = Error::of('Invalid resource', '400', \sprintf('%s does not accept %s.', implode(', ', $types), $predicate), $predicate);
-
-                return;
-            }
-            if ($info->kind === PropertyKind::Datatype && !$term instanceof Literal) {
-                $errors[] = Error::of('Invalid resource', '400', \sprintf('%s takes a literal value.', $predicate), $predicate);
-
-                return;
-            }
-            if ($info->kind === PropertyKind::Object && $term instanceof Literal) {
-                $errors[] = Error::of('Invalid resource', '400', \sprintf('%s takes an object or reference, not a literal.', $predicate), $predicate);
-
-                return;
-            }
-        }
+        // Property validity is judged on the finished graph (validateGraph): judging it here would
+        // depend on whether the node's type arrived before or after this operation (AR-013).
         if ($term instanceof Literal && !self::lexicallyValid($term)) {
             $errors[] = Error::of('Invalid resource', '400', \sprintf('"%s" is not a valid %s.', $term->lexical, $term->datatype), $predicate);
 
@@ -258,6 +239,55 @@ final class ChangeApplier
         // A new embedded object carries its class in the operation's datatype (spec example C2).
         if ($operation->object->isBlankNode() && $term instanceof Iri && $graph->typesOf($term) === [] && $this->vocabulary->isClass($operation->object->datatype)) {
             $graph->add(new Triple($term, new Iri(Graph::RDF_TYPE), new Iri($operation->object->datatype)));
+        }
+    }
+
+    /**
+     * Every property the change touched must be one the ontology knows, one the
+     * node's classes accept, and of the right kind. Checked once the whole
+     * change is applied so the answer does not depend on operation order.
+     *
+     * @param array<string, Iri> $minted
+     * @param list<Error> $errors
+     */
+    private function validateGraph(Graph $graph, Iri $root, array $minted, array &$errors): void
+    {
+        $subjects = [$root, ...array_values($minted)];
+        foreach ($graph->subjects() as $subject) {
+            if ($subject instanceof Iri && LogisticsObject::isEmbeddedId($subject)) {
+                $subjects[] = $subject;
+            }
+        }
+        $seen = [];
+        foreach ($subjects as $subject) {
+            if (isset($seen[$subject->toNTriples()])) {
+                continue;
+            }
+            $seen[$subject->toNTriples()] = true;
+            $types = array_map(static fn(Iri $t): string => $t->value, $graph->typesOf($subject));
+            if ($types === []) {
+                continue;
+            }
+            foreach ($graph->about($subject) as $triple) {
+                $predicate = $triple->predicate->value;
+                if ($predicate === Graph::RDF_TYPE || str_starts_with($predicate, \LambdaTwelve\OneRecord\Spec\Namespaces::API)) {
+                    continue;
+                }
+                $info = $this->vocabulary->property($predicate);
+                if ($info === null) {
+                    $errors[] = Error::of('Invalid resource', '400', \sprintf('"%s" is not a property of the ontology.', $predicate), $predicate, $subject->value);
+                    continue;
+                }
+                if (!$this->vocabulary->accepts($types, $predicate)) {
+                    $errors[] = Error::of('Invalid resource', '400', \sprintf('%s does not accept %s.', implode(', ', $types), $predicate), $predicate, $subject->value);
+                    continue;
+                }
+                if ($info->kind === PropertyKind::Datatype && !$triple->object instanceof Literal) {
+                    $errors[] = Error::of('Invalid resource', '400', \sprintf('%s takes a literal value.', $predicate), $predicate, $subject->value);
+                } elseif ($info->kind === PropertyKind::Object && $triple->object instanceof Literal) {
+                    $errors[] = Error::of('Invalid resource', '400', \sprintf('%s takes an object or reference, not a literal.', $predicate), $predicate, $subject->value);
+                }
+            }
         }
     }
 

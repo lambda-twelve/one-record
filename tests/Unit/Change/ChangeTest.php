@@ -119,7 +119,9 @@ final class ChangeTest extends TestCase
         self::assertTrue($json['api:notifyRequestStatusChange']);
         self::assertSame([['@id' => 'https://1r.example.com/action-requests/v1']], $json['api:hasVerificationRequest']);
         self::assertEquals($change, Change::fromJsonLd($json));
-        self::assertEquals(OperationObject::literal(new Literal('x', null, 'en')), new OperationObject(Literal::XSD_STRING, 'x'), 'language tags cannot travel in an operation object');
+        // A language tag cannot travel in an operation object; pretending it is an xsd:string would change the value (AR-012).
+        $this->expectException(ChangeException::class);
+        OperationObject::literal(new Literal('x', null, 'en'));
     }
 
     /**

@@ -138,8 +138,12 @@ final class Comparer
             Literal::XSD_INTEGER => preg_match('/^[+-]?\d+$/', $term->lexical) === 1
                 ? new Literal(self::canonicalInteger($term->lexical), Literal::XSD_INTEGER)
                 : $term,
-            Literal::XSD_DOUBLE, Literal::XSD_DECIMAL => is_numeric($term->lexical)
+            Literal::XSD_DOUBLE => is_numeric($term->lexical)
                 ? new Literal(Literal::formatDouble((float) $term->lexical), Literal::XSD_DOUBLE)
+                : $term,
+            // Exact: 9007199254740993 and 9007199254740992 differ, however a float would see them (AR-011).
+            Literal::XSD_DECIMAL => ($decimal = self::canonicalDecimal($term->lexical)) !== null
+                ? new Literal($decimal, Literal::XSD_DECIMAL)
                 : $term,
             Literal::XSD_BOOLEAN => match ($term->lexical) {
                 '1' => Literal::boolean(true),
@@ -172,6 +176,24 @@ final class Comparer
         return new Literal($utc->format('Y-m-d\TH:i:s') . ($fraction === '' ? '' : '.' . $fraction) . 'Z', Literal::XSD_DATETIME);
     }
 
+    /**
+     * The canonical xsd:decimal lexical form: no sign on zero, no leading
+     * zeros, no trailing fraction zeros, no bare dot; null when not a decimal.
+     */
+    private static function canonicalDecimal(string $lexical): ?string
+    {
+        if (preg_match('/^([+-]?)(\d*)(?:\.(\d*))?$/', $lexical, $m) !== 1 || ($m[2] === '' && ($m[3] ?? '') === '')) {
+            return null;
+        }
+        $integer = ltrim($m[2], '0');
+        $fraction = rtrim($m[3] ?? '', '0');
+        if ($integer === '' && $fraction === '') {
+            return '0';
+        }
+
+        return ($m[1] === '-' ? '-' : '') . ($integer === '' ? '0' : $integer) . ($fraction === '' ? '' : '.' . $fraction);
+    }
+
     private static function canonicalInteger(string $lexical): string
     {
         $negative = str_starts_with($lexical, '-');
@@ -201,12 +223,42 @@ final class Comparer
             return [];
         }
 
+        // Colour refinement first; then, while ties remain, individualise one node of the
+        // smallest tie class and refine again. Breaking every tie by original label
+        // independently is not sound: two symmetric subtrees can get mirrored choices and
+        // the labels no longer agree between isomorphic graphs (AR-010). Individualising
+        // one node and letting refinement propagate the choice keeps every later choice
+        // consistent with it; for truly automorphic nodes the choice does not matter.
         $hashes = array_fill_keys(array_keys($blanks), '');
-        $distinct = 0;
+        $hashes = $this->refine($graph, $blanks, $hashes);
+        $guard = 0;
+        while (($tie = $this->smallestTie($hashes)) !== null && $guard++ < \count($blanks)) {
+            $hashes[$tie] = hash('sha256', 'individual ' . $hashes[$tie]);
+            $hashes = $this->refine($graph, $blanks, $hashes);
+        }
+
+        $labels = [];
+        foreach ($hashes as $label => $hash) {
+            $labels[$label] = 'c' . substr($hash, 0, 24);
+        }
+
+        return $labels;
+    }
+
+    /**
+     * Weisfeiler-Lehman style refinement until the partition stops changing.
+     *
+     * @param array<string, BlankNode> $blanks
+     * @param array<string, string> $hashes
+     * @return array<string, string>
+     */
+    private function refine(Graph $graph, array $blanks, array $hashes): array
+    {
+        $distinct = \count(array_unique($hashes));
         for ($round = 0; $round < \count($blanks) + 1; $round++) {
             $next = [];
             foreach ($blanks as $label => $node) {
-                $parts = [];
+                $parts = [$hashes[$label]];
                 foreach ($graph as $triple) {
                     if ($triple->subject instanceof BlankNode && $triple->subject->label === $label) {
                         $parts[] = 'o ' . $triple->predicate->value . ' ' . $this->termHash($triple->object, $hashes);
@@ -226,20 +278,37 @@ final class Comparer
             $distinct = $nowDistinct;
         }
 
-        // Ties are structurally identical nodes; give them ordinal labels in a stable order.
+        return $hashes;
+    }
+
+    /**
+     * One member of the smallest class of tied nodes (ties broken by hash, so
+     * both graphs pick the same class), or null when every node is distinct.
+     *
+     * @param array<string, string> $hashes
+     */
+    private function smallestTie(array $hashes): ?string
+    {
         $groups = [];
         foreach ($hashes as $label => $hash) {
             $groups[$hash][] = $label;
         }
-        $labels = [];
+        $best = null;
         foreach ($groups as $hash => $members) {
-            sort($members, SORT_STRING);
-            foreach ($members as $index => $label) {
-                $labels[$label] = 'c' . substr($hash, 0, 20) . (\count($members) > 1 ? '_' . $index : '');
+            if (\count($members) < 2) {
+                continue;
+            }
+            if ($best === null || \count($members) < \count($groups[$best]) || (\count($members) === \count($groups[$best]) && strcmp((string) $hash, $best) < 0)) {
+                $best = (string) $hash;
             }
         }
+        if ($best === null) {
+            return null;
+        }
+        $members = $groups[$best];
+        sort($members, SORT_STRING);
 
-        return $labels;
+        return $members[0];
     }
 
     /**

@@ -9,6 +9,7 @@ use LambdaTwelve\OneRecord\Api\ActionRequest;
 use LambdaTwelve\OneRecord\Api\Error;
 use LambdaTwelve\OneRecord\Api\Notification;
 use LambdaTwelve\OneRecord\Api\NotificationEventType;
+use LambdaTwelve\OneRecord\Api\RequestStatus;
 use LambdaTwelve\OneRecord\Api\Subscription;
 use LambdaTwelve\OneRecord\Change\Change;
 use LambdaTwelve\OneRecord\Change\ChangeBuilder;
@@ -75,22 +76,33 @@ final class DataHolder
 
     /**
      * Apply a change of the holder's own making: created and accepted at once.
+     *
+     * @throws ChangeFailed when the change could not be applied; the request stays recorded as failed
      */
     public function change(Change $change): ActionRequest
     {
         return $this->services->unitOfWork->run(function () use ($change): ActionRequest {
             $request = $this->requests->create($change, $this->services->config->dataHolder);
+            $decided = $this->requests->accept($request, $this->services->config->dataHolder);
+            if ($decided->status === RequestStatus::Failed) {
+                // Returning the failed request read as success to callers checking for null (AR-027).
+                throw new ChangeFailed($decided);
+            }
 
-            return $this->requests->accept($request, $this->services->config->dataHolder);
+            return $decided;
         });
     }
 
     /**
      * Create or update every object of a graph, idempotently: unchanged objects
      * produce nothing, changed ones a new revision. Pass the URIs of objects
-     * already published so they keep them.
+     * already published so they keep them. A change that cannot be applied
+     * throws ChangeFailed out of the unit of work, so with a transactional
+     * UnitOfWork nothing of the graph is kept; without one, objects handled
+     * before the failure stay published.
      *
      * @param array<string, Iri> $existing local key => URI
+     * @throws ChangeFailed
      */
     public function publish(LocalGraph|ResolvedGraph $graph, ?IriMinter $minter = null, array $existing = []): PublishResult
     {

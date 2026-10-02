@@ -122,4 +122,22 @@ final class DataHolderTest extends ServerTestCase
         $this->expectException(InvalidArgumentException::class);
         $holder->update($this->piece('ghost'));
     }
+
+    public function testAr027AFailedChangeIsAnExceptionNotAnUpdate(): void
+    {
+        $holder = new DataHolder($this->server->services);
+        $piece = $holder->create($this->piece());
+        $stale = (new \LambdaTwelve\OneRecord\Change\ChangeBuilder())->diff($piece->object, ObjectBuilder::of(Cargo::Piece)->set(Cargo::goodsDescription, 'Magazines')->set(Cargo::coload, false)->set(Cargo::grossWeight, Values::quantity(20.0, MeasurementUnitCode::KGM))->build($piece->object->iri), 7);
+        self::assertNotNull($stale);
+
+        try {
+            $holder->change($stale);
+            self::fail('a change against a revision the object is not at fails');
+        } catch (\LambdaTwelve\OneRecord\Server\ChangeFailed $e) {
+            self::assertSame(\LambdaTwelve\OneRecord\Api\RequestStatus::Failed, $e->request->status);
+            self::assertStringContainsString('revision', $e->getMessage());
+        }
+        self::assertSame(1, $this->server->objects->latest($piece->object->iri)?->latestRevision, 'nothing was written');
+        self::assertSame('Books', $this->server->objects->latest($piece->object->iri)->object->literal(Cargo::goodsDescription));
+    }
 }

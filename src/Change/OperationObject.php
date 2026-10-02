@@ -21,9 +21,17 @@ final readonly class OperationObject
         public string $value,
     ) {}
 
+    /**
+     * @throws ChangeException for a language-tagged literal: api:hasDatatype/api:hasValue cannot carry the tag
+     *                         (spec question 29), and writing it as xsd:string would silently change the value
+     */
     public static function literal(Literal $literal): self
     {
-        return new self($literal->language !== null ? Literal::XSD_STRING : $literal->datatype, $literal->lexical);
+        if ($literal->language !== null) {
+            throw ChangeException::because('Invalid resource', \sprintf('"%s"@%s is a language-tagged literal; an api:Change cannot express the language tag, so the value cannot be added or deleted through a change.', $literal->lexical, $literal->language));
+        }
+
+        return new self($literal->datatype, $literal->lexical);
     }
 
     public function isLiteral(): bool

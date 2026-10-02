@@ -21,8 +21,10 @@ use LambdaTwelve\OneRecord\Model\Builder\Values;
 use LambdaTwelve\OneRecord\Model\LogisticsObject;
 use LambdaTwelve\OneRecord\Model\Uuid5EmbeddedIdMinter;
 use LambdaTwelve\OneRecord\Rdf\BlankNode;
+use LambdaTwelve\OneRecord\Rdf\Graph;
 use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Rdf\Literal;
+use LambdaTwelve\OneRecord\Rdf\Triple;
 use LambdaTwelve\OneRecord\Spec\Namespaces;
 use LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo;
 use LambdaTwelve\OneRecord\Vocabulary\Generated\CodeLists\MeasurementUnitCode;
@@ -59,11 +61,11 @@ use PHPUnit\Framework\TestCase;
 #[UsesClass(\LambdaTwelve\OneRecord\Vocabulary\PropertyInfo::class)]
 #[UsesClass(\LambdaTwelve\OneRecord\Vocabulary\IndividualInfo::class)]
 #[UsesClass(\LambdaTwelve\OneRecord\Vocabulary\CodeListInfo::class)]
-#[UsesClass(\LambdaTwelve\OneRecord\Rdf\Graph::class)]
+#[UsesClass(Graph::class)]
 #[UsesClass(Iri::class)]
 #[UsesClass(BlankNode::class)]
 #[UsesClass(Literal::class)]
-#[UsesClass(\LambdaTwelve\OneRecord\Rdf\Triple::class)]
+#[UsesClass(Triple::class)]
 final class ChangeBuilderAndApplierTest extends TestCase
 {
     private const string PIECE = 'https://1r.example.com/logistics-objects/1a8ded38-1804-467c-a369-81a411416b7c';
@@ -78,13 +80,13 @@ final class ChangeBuilderAndApplierTest extends TestCase
         // What a server holds: embedded objects already carry internal: ids. Apply a creating change of nothing,
         // so just build and give blank nodes ids through a round trip of the applier's minter semantics.
         $object = $builder->build(new Iri(self::PIECE));
-        $graph = new \LambdaTwelve\OneRecord\Rdf\Graph();
+        $graph = new Graph();
         $minter = new Uuid5EmbeddedIdMinter();
         $ids = [];
         foreach ($object->graph as $triple) {
             $s = $triple->subject instanceof BlankNode ? ($ids[$triple->subject->label] ??= $minter->mint($object->iri, 'seed:' . $triple->subject->label)) : $triple->subject;
             $o = $triple->object instanceof BlankNode ? ($ids[$triple->object->label] ??= $minter->mint($object->iri, 'seed:' . $triple->object->label)) : $triple->object;
-            $graph->add(new \LambdaTwelve\OneRecord\Rdf\Triple($s, $triple->predicate, $o));
+            $graph->add(new Triple($s, $triple->predicate, $o));
         }
 
         return new LogisticsObject($object->iri, $graph);
@@ -281,7 +283,7 @@ final class ChangeBuilderAndApplierTest extends TestCase
             ['revision mismatch', new Change($s, 7, [Operation::add($s, new Iri(Cargo::goodsDescription), $literal('x'))]), '409'],
             ['wrong object', new Change(new Iri('https://1r.example.com/logistics-objects/other'), 1, [Operation::add($s, new Iri(Cargo::goodsDescription), $literal('x'))]), '400'],
             ['events', new Change($s, 1, [Operation::add($s, new Iri(Cargo::events), new OperationObject(Cargo::LogisticsEvent, self::PIECE . '/logistics-events/e'))]), '400'],
-            ['type of the object', new Change($s, 1, [Operation::add($s, new Iri(\LambdaTwelve\OneRecord\Rdf\Graph::RDF_TYPE), new OperationObject(Cargo::Shipment, Cargo::Shipment))]), '400'],
+            ['type of the object', new Change($s, 1, [Operation::add($s, new Iri(Graph::RDF_TYPE), new OperationObject(Cargo::Shipment, Cargo::Shipment))]), '400'],
             ['unknown subject', new Change($s, 1, [Operation::add(new Iri('https://1r.example.com/logistics-objects/other'), new Iri(Cargo::goodsDescription), $literal('x'))]), '400'],
             ['blank subject never introduced', new Change($s, 1, [Operation::add(new BlankNode('b9'), new Iri(Cargo::numericalValue), new OperationObject(Literal::XSD_DOUBLE, '1'))]), '400'],
             ['delete of absent value', new Change($s, 1, [Operation::delete($s, new Iri(Cargo::goodsDescription), $literal('never there'))]), '422'],
@@ -335,5 +337,44 @@ final class ChangeBuilderAndApplierTest extends TestCase
 
         $this->expectException(ChangeException::class);
         (new ChangeBuilder())->diff($served, ObjectBuilder::of(Cargo::Shipment)->set(Cargo::goodsDescription, 'Books')->build($iri), 1);
+    }
+
+    public function testAr012ALanguageTaggedLiteralCannotBeDiffedSilently(): void
+    {
+        $iri = new Iri('https://1r.example.com/logistics-objects/p1');
+        $tagged = new LogisticsObject($iri, new Graph([new Triple($iri, new Iri(Graph::RDF_TYPE), new Iri(Cargo::Piece)), new Triple($iri, new Iri(Cargo::goodsDescription), new Literal('Books', null, 'en'))]));
+        $plain = ObjectBuilder::of(Cargo::Piece)->set(Cargo::goodsDescription, 'Other')->build($iri);
+
+        try {
+            (new ChangeBuilder())->diff($tagged, $plain, 1);
+            self::fail('the tag cannot be expressed in an api:Change');
+        } catch (ChangeException $e) {
+            self::assertStringContainsString('language-tagged', $e->getMessage());
+        }
+    }
+
+    public function testAr013OperationOrderDoesNotChangeTheDecision(): void
+    {
+        $iri = new Iri('https://1r.example.com/logistics-objects/p1');
+        $piece = ObjectBuilder::of(Cargo::Piece)->set(Cargo::goodsDescription, 'Books')->build($iri);
+        $link = Operation::add($iri, new Iri(Cargo::grossWeight), new OperationObject(Cargo::Value, '_:n'));
+        $bogus = Operation::add(new BlankNode('n'), new Iri('https://example/unknown'), new OperationObject(Literal::XSD_STRING, 'x'));
+        $applier = new ChangeApplier();
+
+        foreach ([[$link, $bogus], [$bogus, $link]] as $operations) {
+            try {
+                $applier->apply($piece, 1, new Change($iri, 1, $operations));
+                self::fail('an unknown property on the new Value is refused whatever the order');
+            } catch (ChangeRejected $e) {
+                self::assertStringContainsString('unknown', $e->errors[0]->details[0]->message ?? '');
+            }
+        }
+
+        // And a valid embedded node is accepted whatever the order.
+        $value = Operation::add(new BlankNode('n'), new Iri(Cargo::numericalValue), new OperationObject(Literal::XSD_DOUBLE, '20.5'));
+        foreach ([[$link, $value], [$value, $link]] as $operations) {
+            $result = $applier->apply($piece, 1, new Change($iri, 1, $operations));
+            self::assertSame([Cargo::grossWeight], $result->changedProperties);
+        }
     }
 }

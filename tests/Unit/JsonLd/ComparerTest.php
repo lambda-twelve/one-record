@@ -173,4 +173,56 @@ final class ComparerTest extends TestCase
             array_map(static fn(Triple $t): string => $t->toNTriples(), $b->sorted()),
         );
     }
+
+    public function testAr010SymmetricTreesWithSwappedBlankLabelsAreIsomorphic(): void
+    {
+        // r p _:a . r p _:b . _:a q _:c . _:b q _:d . _:c q "x" . _:d q "x" ; then c and d renamed into each other.
+        $build = static function (string $c, string $d): Graph {
+            $g = new Graph();
+            $r = new Iri('https://x.example/r');
+            $p = new Iri('https://x.example/p');
+            $q = new Iri('https://x.example/q');
+            foreach ([['a', $c], ['b', $d]] as [$parent, $child]) {
+                $g->add(new Triple($r, $p, new BlankNode($parent)));
+                $g->add(new Triple(new BlankNode($parent), $q, new BlankNode($child)));
+                $g->add(new Triple(new BlankNode($child), $q, Literal::string('x')));
+            }
+
+            return $g;
+        };
+        $comparer = new Comparer();
+        self::assertTrue($comparer->isomorphic($build('c', 'd'), $build('d', 'c')), 'a bijective relabelling is the same graph');
+        self::assertTrue($comparer->compare($build('c', 'd'), $build('d', 'c'))->isEqual());
+
+        // Nearby non-isomorphic: one leaf says "y".
+        $other = $build('c', 'd');
+        $other->remove(new Triple(new BlankNode('d'), new Iri('https://x.example/q'), Literal::string('x')));
+        $other->add(new Triple(new BlankNode('d'), new Iri('https://x.example/q'), Literal::string('y')));
+        self::assertFalse($comparer->isomorphic($build('c', 'd'), $other));
+
+        // A two-node blank cycle rooted at a blank node, relabelled.
+        $cycle = static function (string $m, string $n): Graph {
+            $g = new Graph();
+            $p = new Iri('https://x.example/p');
+            $g->add(new Triple(new BlankNode($m), $p, new BlankNode($n)));
+            $g->add(new Triple(new BlankNode($n), $p, new BlankNode($m)));
+            $g->add(new Triple(new BlankNode($m), new Iri('https://x.example/q'), Literal::string('m')));
+
+            return $g;
+        };
+        self::assertTrue($comparer->isomorphic($cycle('m', 'n'), $cycle('zz', 'aa')));
+    }
+
+    public function testAr011DecimalsCompareExactlyAndDoublesStayDoubles(): void
+    {
+        $comparer = new Comparer();
+        $decimal = static fn(string $v): Literal => new Literal($v, Literal::XSD_DECIMAL);
+        self::assertFalse($comparer->normaliseLiteral($decimal('9007199254740992'))->equals($comparer->normaliseLiteral($decimal('9007199254740993'))), 'adjacent decimals beyond 2^53 differ');
+        self::assertFalse($comparer->normaliseLiteral($decimal('0.12345678901234567890'))->equals($comparer->normaliseLiteral($decimal('0.12345678901234567891'))));
+        self::assertTrue($comparer->normaliseLiteral($decimal('1.50'))->equals($comparer->normaliseLiteral($decimal('01.5'))), 'lexical variants of one value');
+        self::assertTrue($comparer->normaliseLiteral($decimal('-0.0'))->equals($comparer->normaliseLiteral($decimal('0'))));
+        self::assertSame(Literal::XSD_DECIMAL, $comparer->normaliseLiteral($decimal('1.5'))->datatype, 'a decimal does not become a double');
+        self::assertSame('not a number', $comparer->normaliseLiteral($decimal('not a number'))->lexical, 'a non-decimal lexical is left alone');
+        self::assertTrue($comparer->normaliseLiteral(new Literal('2.0E1', Literal::XSD_DOUBLE))->equals($comparer->normaliseLiteral(new Literal('20.0', Literal::XSD_DOUBLE))));
+    }
 }
