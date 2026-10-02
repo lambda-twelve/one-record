@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace LambdaTwelve\OneRecord\Api;
 
+use LambdaTwelve\OneRecord\JsonLd\Nodes;
 use LambdaTwelve\OneRecord\Rdf\Iri;
 
 /**

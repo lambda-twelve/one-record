@@ -2,13 +2,12 @@
 
 declare(strict_types=1);
 
-namespace LambdaTwelve\OneRecord\Api;
+namespace LambdaTwelve\OneRecord\JsonLd;
 
 use DateTimeImmutable;
 use DateTimeInterface;
 use Exception;
 use InvalidArgumentException;
-use LambdaTwelve\OneRecord\JsonLd\Context;
 use LambdaTwelve\OneRecord\Rdf\BlankNode;
 use LambdaTwelve\OneRecord\Rdf\Graph;
 use LambdaTwelve\OneRecord\Rdf\Iri;

@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace LambdaTwelve\OneRecord\Server\Endpoint;
 
 use LambdaTwelve\OneRecord\Api\ActionRequest;
-use LambdaTwelve\OneRecord\Api\Nodes;
 use LambdaTwelve\OneRecord\Api\RequestStatus;
+use LambdaTwelve\OneRecord\JsonLd\Nodes;
 use LambdaTwelve\OneRecord\Server\Http\HttpException;
 use LambdaTwelve\OneRecord\Server\Http\Negotiated;
 use LambdaTwelve\OneRecord\Server\Http\Responder;

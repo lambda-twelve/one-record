@@ -8,7 +8,9 @@ use DateTimeImmutable;
 use LambdaTwelve\OneRecord\Api\Collection;
 use LambdaTwelve\OneRecord\Api\InvalidDocument;
 use LambdaTwelve\OneRecord\JsonLd\Context;
+use LambdaTwelve\OneRecord\JsonLd\JsonLdException;
 use LambdaTwelve\OneRecord\Model\LogisticsEvent;
+use LambdaTwelve\OneRecord\Model\ModelException;
 use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Server\Event\LogisticsEventReceived;
 use LambdaTwelve\OneRecord\Server\Http\ContentNegotiation;
@@ -49,7 +51,11 @@ final class LogisticsEventsEndpoint extends AbstractEndpoint
         $json = $this->services->body->json($request);
         $eventIri = $this->services->config->logisticsEventIri($id, $this->services->ids->next());
         $now = $this->services->clock->now();
-        $event = LogisticsEvent::fromJsonLd($json, $eventIri, $stored->object->iri, $now);
+        try {
+            $event = LogisticsEvent::fromJsonLd($json, $eventIri, $stored->object->iri, $now);
+        } catch (ModelException $e) {
+            throw HttpException::badRequest($e->getMessage(), null, $e->getPrevious() instanceof JsonLdException ? 'Invalid body request' : 'Invalid resource');
+        }
         $this->validate($event, $stored->object->iri);
 
         $this->services->events->append($event);

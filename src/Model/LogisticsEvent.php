@@ -5,11 +5,10 @@ declare(strict_types=1);
 namespace LambdaTwelve\OneRecord\Model;
 
 use DateTimeImmutable;
-use LambdaTwelve\OneRecord\Api\InvalidDocument;
-use LambdaTwelve\OneRecord\Api\Nodes;
 use LambdaTwelve\OneRecord\JsonLd\Context;
 use LambdaTwelve\OneRecord\JsonLd\JsonLd;
 use LambdaTwelve\OneRecord\JsonLd\JsonLdException;
+use LambdaTwelve\OneRecord\JsonLd\Nodes;
 use LambdaTwelve\OneRecord\JsonLd\Writer;
 use LambdaTwelve\OneRecord\Rdf\BlankNode;
 use LambdaTwelve\OneRecord\Rdf\Graph;
@@ -41,11 +40,11 @@ final readonly class LogisticsEvent
         try {
             $document = JsonLd::expand($json);
         } catch (JsonLdException $e) {
-            throw InvalidDocument::because('Invalid body request', $e->getMessage());
+            throw new ModelException($e->getMessage(), previous: $e);
         }
         $types = $document->rootTypes();
         if ($types === [] || !\in_array(Cargo::LogisticsEvent, $types, true) && !\in_array(Cargo::StatusUpdateEvent, $types, true)) {
-            throw InvalidDocument::because('Invalid resource', 'The body is not a cargo:LogisticsEvent.');
+            throw new ModelException('The body is not a cargo:LogisticsEvent.');
         }
         $graph = new Graph();
         foreach ($document->graph as $triple) {
@@ -55,7 +54,7 @@ final readonly class LogisticsEvent
         }
         $event = new self($iri, $logisticsObject, $graph, $created);
         if ($event->eventDate() === null) {
-            throw InvalidDocument::because('Invalid resource', 'Every logistics event must have a cargo:eventDate.', Cargo::eventDate);
+            throw new ModelException('Every logistics event must have a cargo:eventDate.');
         }
 
         return $event;

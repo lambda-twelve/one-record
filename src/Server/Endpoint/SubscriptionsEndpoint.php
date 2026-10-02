@@ -6,9 +6,9 @@ namespace LambdaTwelve\OneRecord\Server\Endpoint;
 
 use InvalidArgumentException;
 use LambdaTwelve\OneRecord\Api\Collection;
-use LambdaTwelve\OneRecord\Api\Nodes;
 use LambdaTwelve\OneRecord\Api\Subscription;
 use LambdaTwelve\OneRecord\Api\TopicType;
+use LambdaTwelve\OneRecord\JsonLd\Nodes;
 use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Server\ActionRequests;
 use LambdaTwelve\OneRecord\Server\Http\ContentNegotiation;

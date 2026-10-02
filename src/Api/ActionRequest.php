@@ -10,6 +10,7 @@ use LambdaTwelve\OneRecord\Change\Change;
 use LambdaTwelve\OneRecord\JsonLd\ExpandedDocument;
 use LambdaTwelve\OneRecord\JsonLd\JsonLd;
 use LambdaTwelve\OneRecord\JsonLd\JsonLdException;
+use LambdaTwelve\OneRecord\JsonLd\Nodes;
 use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Spec\ApiFeatures;
 use LambdaTwelve\OneRecord\Spec\ApiVersion;

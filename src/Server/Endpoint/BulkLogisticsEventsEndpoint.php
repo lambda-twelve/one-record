@@ -7,8 +7,10 @@ namespace LambdaTwelve\OneRecord\Server\Endpoint;
 use InvalidArgumentException;
 use LambdaTwelve\OneRecord\Api\Error;
 use LambdaTwelve\OneRecord\Api\ErrorDocument;
-use LambdaTwelve\OneRecord\Api\Nodes;
+use LambdaTwelve\OneRecord\JsonLd\JsonLdException;
+use LambdaTwelve\OneRecord\JsonLd\Nodes;
 use LambdaTwelve\OneRecord\Model\LogisticsEvent;
+use LambdaTwelve\OneRecord\Model\ModelException;
 use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Server\Event\LogisticsEventReceived;
 use LambdaTwelve\OneRecord\Server\Http\ContentNegotiation;
@@ -70,7 +72,12 @@ final class BulkLogisticsEventsEndpoint extends AbstractEndpoint
             }
             $eventIri = $this->services->config->logisticsEventIri($objectId ?? '', $this->services->ids->next());
             $body = [...$json, 'cargo:eventFor' => Nodes::ref($target)];
-            $event = LogisticsEvent::fromJsonLd($body, $eventIri, $target, $now);
+            try {
+                $event = LogisticsEvent::fromJsonLd($body, $eventIri, $target, $now);
+            } catch (ModelException $e) {
+                // The body is the same for every object, so a malformed event fails the whole request.
+                throw HttpException::badRequest($e->getMessage(), null, $e->getPrevious() instanceof JsonLdException ? 'Invalid body request' : 'Invalid resource');
+            }
             $this->services->events->append($event);
             $this->services->dispatcher->dispatch(new LogisticsEventReceived($event, $agent));
             (new Fanout($this->services))->logisticsEventReceived($stored, $event);

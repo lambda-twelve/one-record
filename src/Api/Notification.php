@@ -7,6 +7,7 @@ namespace LambdaTwelve\OneRecord\Api;
 use LambdaTwelve\OneRecord\JsonLd\ExpandedDocument;
 use LambdaTwelve\OneRecord\JsonLd\JsonLd;
 use LambdaTwelve\OneRecord\JsonLd\JsonLdException;
+use LambdaTwelve\OneRecord\JsonLd\Nodes;
 use LambdaTwelve\OneRecord\JsonLd\Writer;
 use LambdaTwelve\OneRecord\Model\LogisticsObject;
 use LambdaTwelve\OneRecord\Rdf\Graph;
