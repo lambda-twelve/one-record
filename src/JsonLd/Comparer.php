@@ -114,6 +114,16 @@ final class Comparer
         if (!$term instanceof Literal) {
             return $term;
         }
+
+        return $this->normaliseLiteral($term);
+    }
+
+    /**
+     * The literal in the form this comparer considers canonical: numbers in
+     * JSON-LD's canonical lexical forms, booleans as true/false.
+     */
+    public function normaliseLiteral(Literal $term): Literal
+    {
         if ($this->ignoreLanguageTags && $term->language !== null) {
             return Literal::string($term->lexical);
         }
