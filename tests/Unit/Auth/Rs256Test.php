@@ -150,7 +150,7 @@ final class Rs256Test extends TestCase
 
         // Expired 20 seconds ago: still within leeway.
         $token = $this->signer(clock: new FixedClock('2026-10-02T11:58:40Z'))->sign([], 60);
-        self::assertNotNull($this->verifier($clock)->verify($token));
+        self::assertSame(self::ISSUER, $this->verifier($clock)->verify($token)->issuer());
 
         $strict = new Rs256Verifier(new StaticKeyResolver([self::ISSUER => TestKeys::pair()['public']]), $clock, leewaySeconds: 0);
         $this->expectException(JwtException::class);
@@ -164,7 +164,9 @@ final class Rs256Test extends TestCase
         $payload = Jwk::base64UrlEncode(json_encode(['iss' => self::ISSUER], JSON_THROW_ON_ERROR));
         $key = openssl_pkey_get_private(TestKeys::pair()['private']);
         self::assertNotFalse($key);
+        $signature = '';
         openssl_sign($header . '.' . $payload, $signature, $key, OPENSSL_ALGO_SHA256);
+        self::assertIsString($signature);
         try {
             $this->verifier()->verify($header . '.' . $payload . '.' . Jwk::base64UrlEncode($signature));
             self::fail();

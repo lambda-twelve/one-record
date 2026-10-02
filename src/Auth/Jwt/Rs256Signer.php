@@ -68,6 +68,9 @@ final class Rs256Signer
         if (!openssl_sign($signed, $signature, $this->privateKey, OPENSSL_ALGO_SHA256)) {
             throw new RuntimeException('Signing failed.');
         }
+        if (!\is_string($signature)) {
+            throw new RuntimeException('Signing produced no signature.');
+        }
 
         return $signed . '.' . Jwk::base64UrlEncode($signature);
     }

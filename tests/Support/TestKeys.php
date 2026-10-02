@@ -26,10 +26,10 @@ final class TestKeys
                 throw new RuntimeException('Cannot generate a test key.');
             }
             $details = openssl_pkey_get_details($key);
-            if ($details === false) {
+            if ($details === false || !\is_string($details['key'] ?? null) || !\is_string($private)) {
                 throw new RuntimeException('Cannot read the test key.');
             }
-            self::$pairs[$name] = ['private' => (string) $private, 'public' => (string) $details['key']];
+            self::$pairs[$name] = ['private' => $private, 'public' => $details['key']];
         }
 
         return self::$pairs[$name];

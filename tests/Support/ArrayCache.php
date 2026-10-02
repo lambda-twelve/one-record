@@ -54,10 +54,13 @@ final class ArrayCache implements CacheInterface
         return $out;
     }
 
+    /**
+     * @param iterable<mixed, mixed> $values
+     */
     public function setMultiple(iterable $values, null|int|DateInterval $ttl = null): bool
     {
         foreach ($values as $key => $value) {
-            $this->set((string) $key, $value, $ttl);
+            $this->set(\is_string($key) ? $key : (string) (\is_scalar($key) ? $key : ''), $value, $ttl);
         }
 
         return true;
