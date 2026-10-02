@@ -32,4 +32,14 @@ interface SubscriptionStore
      * @return list<Subscription>
      */
     public function offered(TopicType $topicType, string $topic): array;
+
+    /**
+     * Registers a subscription this host wants, to be answered by offered().
+     */
+    public function offer(Subscription $subscription): void;
+
+    /**
+     * Removes an offer with the same subscriber, topic type and topic.
+     */
+    public function withdraw(Subscription $subscription): void;
 }

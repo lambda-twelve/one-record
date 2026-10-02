@@ -5,9 +5,7 @@ declare(strict_types=1);
 namespace LambdaTwelve\OneRecord\Server\InMemory;
 
 use DateTimeImmutable;
-use LambdaTwelve\OneRecord\Api\ActionRequest;
 use LambdaTwelve\OneRecord\Api\ActionRequestType;
-use LambdaTwelve\OneRecord\Api\RequestStatus;
 use LambdaTwelve\OneRecord\Api\Subscription;
 use LambdaTwelve\OneRecord\Api\TopicType;
 use LambdaTwelve\OneRecord\Rdf\Iri;
@@ -31,13 +29,15 @@ final class InMemorySubscriptionStore implements SubscriptionStore
         $this->offered[] = $subscription;
     }
 
+    public function withdraw(Subscription $subscription): void
+    {
+        $this->offered = array_values(array_filter($this->offered, static fn(Subscription $s): bool => !($s->subscriber->equals($subscription->subscriber) && $s->topicType === $subscription->topicType && $s->topic === $subscription->topic)));
+    }
+
     public function subscribersOf(Iri $logisticsObject, array $types, DateTimeImmutable $now): array
     {
         $out = [];
-        foreach ($this->requests instanceof InMemoryActionRequestStore ? $this->requests->all() : [] as $request) {
-            if ($request->type !== ActionRequestType::Subscription || $request->status !== RequestStatus::Accepted) {
-                continue;
-            }
+        foreach ($this->requests->accepted(ActionRequestType::Subscription) as $request) {
             $subscription = $request->payload;
             if (!$subscription instanceof Subscription || $subscription->isExpiredAt($now) || !$subscription->covers($logisticsObject, $types)) {
                 continue;
@@ -53,9 +53,4 @@ final class InMemorySubscriptionStore implements SubscriptionStore
         return array_values(array_filter($this->offered, static fn(Subscription $s): bool => $s->topicType === $topicType && $s->topic === $topic));
     }
 
-    /** @internal for tests */
-    public static function isAccepted(ActionRequest $request): bool
-    {
-        return $request->status === RequestStatus::Accepted;
-    }
 }

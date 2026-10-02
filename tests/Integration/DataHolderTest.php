@@ -97,8 +97,16 @@ final class DataHolderTest extends ServerTestCase
         self::assertSame(['@id' => $piece->object->iri->value], $json['api:hasLogisticsObject']);
 
         self::assertSame(200, $this->request('GET', '/logistics-objects/piece-1')->getStatusCode());
+        $this->server->policy->allow(new Iri(self::PARTNER), $piece->object->iri, [Permission::PostLogisticsEvent]);
+        $event = json_encode(['@context' => ['cargo' => Cargo::NAMESPACE], '@type' => 'cargo:LogisticsEvent', 'cargo:eventDate' => ['@type' => 'http://www.w3.org/2001/XMLSchema#dateTime', '@value' => '2026-10-02T11:00:00Z']], JSON_THROW_ON_ERROR);
+        self::assertSame(201, $this->request('POST', '/logistics-objects/piece-1/logistics-events', body: $event)->getStatusCode());
+        $this->server->delegations->grant(new \LambdaTwelve\OneRecord\Server\Spi\Grant(new Iri(self::STRANGER), $piece->object->iri, [Permission::GetLogisticsObject]));
+        self::assertCount(1, $this->server->delegations->grantsFor(new Iri(self::STRANGER), $piece->object->iri));
+
         $holder->forget($piece->object->iri);
         self::assertError($this->request('GET', '/logistics-objects/piece-1'), 404);
+        self::assertSame([], $this->server->events->query($piece->object->iri, \LambdaTwelve\OneRecord\Server\Spi\EventQuery::all()), 'events go with the object by default');
+        self::assertSame([], $this->server->delegations->grantsFor(new Iri(self::STRANGER), $piece->object->iri), 'grants too');
         self::assertError($this->request('GET', '/logistics-objects/piece-1/audit-trail'), 404);
         self::assertFalse($this->server->objects->exists($piece->object->iri));
 

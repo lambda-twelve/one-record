@@ -9,6 +9,7 @@ use LambdaTwelve\OneRecord\Model\LogisticsEvent;
 use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Server\Spi\EventQuery;
 use LambdaTwelve\OneRecord\Server\Spi\LogisticsEventStore;
+use LambdaTwelve\OneRecord\Server\Spi\StoreException;
 
 final class InMemoryLogisticsEventStore implements LogisticsEventStore
 {
@@ -20,8 +21,17 @@ final class InMemoryLogisticsEventStore implements LogisticsEventStore
 
     public function append(LogisticsEvent $event): void
     {
+        if (isset($this->events[$event->logisticsObject->value][$event->iri->value])) {
+            throw StoreException::alreadyExists($event->iri);
+        }
         $this->events[$event->logisticsObject->value][$event->iri->value] = $event;
-        $this->lastModified[$event->logisticsObject->value] = $event->created;
+        $current = $this->lastModified[$event->logisticsObject->value] ?? null;
+        $this->lastModified[$event->logisticsObject->value] = $current === null || $event->created > $current ? $event->created : $current;
+    }
+
+    public function eraseFor(Iri $logisticsObject): void
+    {
+        unset($this->events[$logisticsObject->value], $this->lastModified[$logisticsObject->value]);
     }
 
     public function get(Iri $eventIri): ?LogisticsEvent

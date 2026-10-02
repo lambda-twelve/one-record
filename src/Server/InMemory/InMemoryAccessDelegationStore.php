@@ -23,6 +23,11 @@ final class InMemoryAccessDelegationStore implements AccessDelegationStore
         return array_values(array_filter($this->grants, static fn(Grant $g): bool => $g->agent->equals($agent) && $g->logisticsObject->equals($logisticsObject)));
     }
 
+    public function eraseFor(Iri $logisticsObject): void
+    {
+        $this->grants = array_values(array_filter($this->grants, static fn(Grant $g): bool => !$g->logisticsObject->equals($logisticsObject)));
+    }
+
     public function revokeFrom(Iri $accessDelegationRequest): void
     {
         $this->grants = array_values(array_filter($this->grants, static fn(Grant $g): bool => $g->source === null || !$g->source->equals($accessDelegationRequest)));

@@ -65,6 +65,11 @@ final class InMemoryActionRequestStore implements ActionRequestStore
         ));
     }
 
+    public function accepted(ActionRequestType $type): array
+    {
+        return array_values(array_filter($this->requests, static fn(ActionRequest $r): bool => $r->type === $type && $r->status === RequestStatus::Accepted));
+    }
+
     /**
      * @return list<ActionRequest>
      */

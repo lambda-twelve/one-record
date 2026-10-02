@@ -172,14 +172,23 @@ final class DataHolder
     }
 
     /**
-     * Forget an object: every revision is erased from the store. The API has no
-     * delete, so this is the host's data-protection operation; the host must
-     * also make its access policy stop answering for the URI.
+     * Forget an object: every revision is erased, and by default its events
+     * and the grants on it too. The API has no delete, so this is the host's
+     * data-protection operation. Keep events (false) where status history
+     * must outlive the object; action requests are never erased, they are
+     * other parties' history too. The host's own access rules must stop
+     * answering for the URI as well.
      */
-    public function forget(Iri $object): void
+    public function forget(Iri $object, bool $events = true, bool $grants = true): void
     {
-        $this->services->unitOfWork->run(function () use ($object): void {
+        $this->services->unitOfWork->run(function () use ($object, $events, $grants): void {
             $this->services->objects->erase($object);
+            if ($events) {
+                $this->services->events->eraseFor($object);
+            }
+            if ($grants) {
+                $this->services->delegations->eraseFor($object);
+            }
         });
     }
 

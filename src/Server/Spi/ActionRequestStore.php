@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace LambdaTwelve\OneRecord\Server\Spi;
 
 use LambdaTwelve\OneRecord\Api\ActionRequest;
+use LambdaTwelve\OneRecord\Api\ActionRequestType;
 use LambdaTwelve\OneRecord\Rdf\Iri;
 
 /**
@@ -31,4 +32,13 @@ interface ActionRequestStore
      * @return list<ActionRequest>
      */
     public function pendingChanges(Iri $logisticsObject): array;
+
+    /**
+     * Every request of a type in the accepted state: the active subscriptions
+     * and delegations. A SubscriptionStore built over this store derives its
+     * subscribers from here, whatever either store is implemented with.
+     *
+     * @return list<ActionRequest>
+     */
+    public function accepted(ActionRequestType $type): array;
 }

@@ -25,4 +25,9 @@ interface AccessDelegationStore
      * Withdraws every grant that came from this delegation request.
      */
     public function revokeFrom(Iri $accessDelegationRequest): void;
+
+    /**
+     * Withdraws every grant on an object: the host forgetting it (DataHolder::forget()).
+     */
+    public function eraseFor(Iri $logisticsObject): void;
 }
