@@ -33,7 +33,8 @@
             <group>interop</group>
         </exclude>
     </groups>
-    <source>
+    <!-- Deprecations raised inside dependencies are theirs, not ours: only src/ may fail the run. -->
+    <source restrictNotices="true" restrictWarnings="true" ignoreIndirectDeprecations="true">
         <include>
             <directory>src</directory>
         </include>
