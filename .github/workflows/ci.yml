@@ -57,6 +57,19 @@ jobs:
           dependency-versions: ${{ matrix.dependencies }}
       - run: vendor/bin/phpunit --no-coverage
 
+  vocabulary:
+    name: Generated vocabulary is up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          coverage: none
+      - uses: ramsey/composer-install@v3
+      - run: php bin/generate-vocabulary
+      - run: git diff --exit-code --stat -- src/Vocabulary/Generated
+
   docs:
     name: Documentation site builds
     runs-on: ubuntu-latest
