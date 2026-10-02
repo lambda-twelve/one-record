@@ -72,7 +72,7 @@ read or revoke someone else's action request). `Decision::Allow`,
 confirmed).
 
 This is where a host encodes its own rules ("a forwarder sees the shipments
-routed to it"). `InMemoryAccessPolicy` shows the expected shape: internal
+routed to it"). `GrantAccessPolicy` shows the expected shape: internal
 agents, explicit grants, public grants, and grants from the delegation store,
 deny by default.
 

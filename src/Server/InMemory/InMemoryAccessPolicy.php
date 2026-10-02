@@ -6,6 +6,7 @@ namespace LambdaTwelve\OneRecord\Server\InMemory;
 
 use LambdaTwelve\OneRecord\Api\Permission;
 use LambdaTwelve\OneRecord\Rdf\Iri;
+use LambdaTwelve\OneRecord\Server\GrantAccessPolicy;
 use LambdaTwelve\OneRecord\Server\Spi\AccessDelegationStore;
 use LambdaTwelve\OneRecord\Server\Spi\AccessPolicy;
 use LambdaTwelve\OneRecord\Server\Spi\Action;
@@ -14,32 +15,24 @@ use LambdaTwelve\OneRecord\Server\Spi\Decision;
 use Psr\Clock\ClockInterface;
 
 /**
- * The spec's access model in memory: deny by default, single and public
- * authorisations per logistics object, grants from accepted access
- * delegations, and a set of "internal" agents (the host itself) who may do
- * everything including the internal-only endpoints. Denials answer Forbid
- * (403) unless the policy is told to hide.
+ * The old name of GrantAccessPolicy, kept for one beta so wrappers written
+ * against it keep compiling. It was never only in memory: it read every grant
+ * from the AccessDelegationStore it was given.
+ *
+ * @deprecated use GrantAccessPolicy
  */
 final class InMemoryAccessPolicy implements AccessPolicy
 {
-    /** @var array<string, true> */
-    private array $internal = [];
+    private readonly GrantAccessPolicy $policy;
 
-    /** @var array<string, array<string, true>> object IRI => permission values granted to everyone authenticated */
-    private array $public = [];
+    public function __construct(AccessDelegationStore $delegations, ClockInterface $clock, Decision $denial = Decision::Forbid)
+    {
+        $this->policy = new GrantAccessPolicy($delegations, $clock, $denial);
+    }
 
-    public function __construct(
-        private readonly AccessDelegationStore $delegations,
-        private readonly ClockInterface $clock,
-        private readonly Decision $denial = Decision::Forbid,
-    ) {}
-
-    /**
-     * An agent that acts for the host: full access, internal endpoints included.
-     */
     public function addInternal(Iri $agent): void
     {
-        $this->internal[$agent->value] = true;
+        $this->policy->addInternal($agent);
     }
 
     /**
@@ -47,7 +40,7 @@ final class InMemoryAccessPolicy implements AccessPolicy
      */
     public function allow(Iri $agent, Iri $logisticsObject, array $permissions): void
     {
-        $this->delegations->grant(new \LambdaTwelve\OneRecord\Server\Spi\Grant($agent, $logisticsObject, $permissions));
+        $this->policy->allow($agent, $logisticsObject, $permissions);
     }
 
     /**
@@ -55,30 +48,11 @@ final class InMemoryAccessPolicy implements AccessPolicy
      */
     public function allowEveryone(Iri $logisticsObject, array $permissions): void
     {
-        foreach ($permissions as $permission) {
-            $this->public[$logisticsObject->value][$permission->value] = true;
-        }
+        $this->policy->allowEveryone($logisticsObject, $permissions);
     }
 
     public function decide(Agent $agent, Action $action, ?Iri $resource): Decision
     {
-        if (isset($this->internal[$agent->iri->value])) {
-            return Decision::Allow;
-        }
-        $permission = $action->permission() ?? ($action === Action::ReadAuditTrail ? Permission::GetLogisticsObject : null);
-        if ($permission === null || $resource === null) {
-            return $this->denial;
-        }
-        if (isset($this->public[$resource->value][$permission->value])) {
-            return Decision::Allow;
-        }
-        $now = $this->clock->now();
-        foreach ($this->delegations->grantsFor($agent->iri, $resource) as $grant) {
-            if ($grant->isActiveAt($now) && $grant->allows($permission)) {
-                return Decision::Allow;
-            }
-        }
-
-        return $this->denial;
+        return $this->policy->decide($agent, $action, $resource);
     }
 }

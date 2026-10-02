@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace LambdaTwelve\OneRecord\Server\InMemory;
 
+use LambdaTwelve\OneRecord\Server\GrantAccessPolicy;
 use LambdaTwelve\OneRecord\Server\Spi\Decision;
 use Psr\Clock\ClockInterface;
 
@@ -21,7 +22,7 @@ final class InMemoryState
     public readonly InMemorySubscriptionStore $subscriptions;
     public readonly InMemoryAccessDelegationStore $delegations;
     public readonly InMemoryNotificationOutbox $outbox;
-    public readonly InMemoryAccessPolicy $policy;
+    public readonly GrantAccessPolicy $policy;
 
     public function __construct(ClockInterface $clock, Decision $denial = Decision::Forbid)
     {
@@ -31,6 +32,6 @@ final class InMemoryState
         $this->subscriptions = new InMemorySubscriptionStore($this->actionRequests);
         $this->delegations = new InMemoryAccessDelegationStore();
         $this->outbox = new InMemoryNotificationOutbox();
-        $this->policy = new InMemoryAccessPolicy($this->delegations, $clock, $denial);
+        $this->policy = new GrantAccessPolicy($this->delegations, $clock, $denial);
     }
 }

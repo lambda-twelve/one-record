@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace LambdaTwelve\OneRecord\Server\InMemory;
 
+use LambdaTwelve\OneRecord\Server\GrantAccessPolicy;
 use LambdaTwelve\OneRecord\Server\OneRecordServer;
 use LambdaTwelve\OneRecord\Server\ServerBuilder;
 use LambdaTwelve\OneRecord\Server\ServerConfig;
@@ -32,7 +33,7 @@ final class InMemoryServer
     public readonly InMemorySubscriptionStore $subscriptions;
     public readonly InMemoryAccessDelegationStore $delegations;
     public readonly InMemoryNotificationOutbox $outbox;
-    public readonly InMemoryAccessPolicy $policy;
+    public readonly GrantAccessPolicy $policy;
     public readonly Services $services;
     public readonly OneRecordServer $handler;
 
