@@ -79,6 +79,9 @@ it. From 1.0.0 on, breaking changes need a new major version.
   `AccessDelegation`, `Verification`, `Notification`, `ServerInformation`,
   `ActionRequest`, `Collection`, `ErrorDocument`) and `Spec\ApiFeatures`,
   the table of properties gated by API version.
+- Compliance collection (`tests/Compliance/`): a newman collection generated
+  from the specification's examples with assertions from its MUST tables, run
+  in CI against `bin/serve` for API 2.2.0 and 2.3.0 (`ddev compliance` locally).
 - `bin/serve`: the in-memory server under PHP's built-in web server with an
   OAuth 2.0 token endpoint, for development and the compliance collection.
 - `Server\Spi\Authenticator` and `Server\Spi\Agent`.

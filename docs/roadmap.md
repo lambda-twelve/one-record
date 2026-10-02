@@ -11,8 +11,8 @@ Status: :white_check_mark: done, :construction: in progress, :hourglass: planned
 | 3 | Model, local-key graph, value builders, change diff and change applier | :white_check_mark: |
 | 4 | RS256 JWT verifier/signer, JWKS resolver, client-credentials token endpoint | :white_check_mark: |
 | 5 | Server: SPI, in-memory stores, every API 2.2/2.3 endpoint, action-request lifecycle, notification fan-out, `bin/serve` | :white_check_mark: |
-| 6 | Compliance collection (newman) run for API 2.2.0 and 2.3.0 in CI | :construction: |
-| 7 | Client over PSR-18 with server-information discovery and version selection | :hourglass: |
+| 6 | Compliance collection (newman) run for API 2.2.0 and 2.3.0 in CI | :white_check_mark: |
+| 7 | Client over PSR-18 with server-information discovery and version selection | :construction: |
 | 8 | Interoperability suite against NE:ONE as an RDF comparison oracle | :hourglass: |
 | 9 | Documentation complete, first release 1.0.0-beta1 | :hourglass: |
 

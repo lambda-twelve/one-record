@@ -67,6 +67,27 @@ jobs:
             coverage.xml
             coverage.json
 
+  compliance:
+    name: Compliance collection (newman, API 2.2.0 and 2.3.0)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: json, openssl
+          coverage: none
+      - uses: ramsey/composer-install@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: bash tests/Compliance/run.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compliance-reports
+          path: .cache/compliance/report-*.xml
+
   vocabulary:
     name: Generated vocabulary is up to date
     runs-on: ubuntu-latest

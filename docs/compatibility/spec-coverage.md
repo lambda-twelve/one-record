@@ -9,6 +9,17 @@ Spec sources: [2025-07 edition](https://iata-cargo.github.io/ONE-Record/2025-07/
 (API 2.2.0) and [2026-07 edition](https://iata-cargo.github.io/ONE-Record/2026-07/API-Security/)
 (API 2.3.0). Pinned commits are recorded in `src/Vocabulary/Generated/Manifest.php`.
 
+## Compliance collection
+
+Besides the PHPUnit tests linked below, `tests/Compliance/` holds a newman
+collection generated from the specification's example bodies with assertions
+taken from its MUST tables (status codes, `Location`, `Type`, `Content-Type`
+version echo, `Content-Language`, revision headers, RFC 1123 dates, `api:Error`
+bodies, the action-request lifecycle end to end). CI runs it against
+`bin/serve` once for API 2.2.0 and once for 2.3.0; locally, `ddev compliance`.
+The request set mirrors IATA's own Postman collection, which carries no
+assertions of its own.
+
 ## Endpoints
 
 | Endpoint | API | Status | Notes / test |
