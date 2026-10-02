@@ -3,7 +3,41 @@
 
 declare(strict_types=1);
 
-// Regenerates src/Vocabulary/Generated from IATA's ontologies at pinned commits.
-// Implemented in roadmap phase 1.
-fwrite(STDERR, "bin/generate-vocabulary is not implemented yet.\n");
-exit(1);
+/*
+ * Regenerates src/Vocabulary/Generated from IATA's ONE Record ontologies.
+ *
+ * Every edition declared in Spec\Edition is downloaded at its pinned commit
+ * (cached under .cache/ontologies) and merged into one vocabulary with
+ * per-term version metadata. Options:
+ *   --source=<dir>   read <dir>/<edition tag>/<file> instead of downloading
+ *   --cache=<dir>    download cache directory (default .cache/ontologies)
+ *   --output=<dir>   output directory (default src/Vocabulary/Generated)
+ */
+
+use LambdaTwelve\OneRecord\Spec\Edition;
+use LambdaTwelve\OneRecord\Tools\Vocabulary\DirectorySource;
+use LambdaTwelve\OneRecord\Tools\Vocabulary\GitHubSource;
+use LambdaTwelve\OneRecord\Tools\Vocabulary\VocabularyGenerator;
+
+require_once dirname(__DIR__) . '/vendor/autoload.php';
+
+$root = dirname(__DIR__);
+$options = getopt('', ['source:', 'cache:', 'output:', 'help']);
+if (isset($options['help'])) {
+    fwrite(STDOUT, "Usage: bin/generate-vocabulary [--source=<dir>] [--cache=<dir>] [--output=<dir>]\n");
+    exit(0);
+}
+
+$source = isset($options['source']) && is_string($options['source'])
+    ? new DirectorySource($options['source'])
+    : new GitHubSource(is_string($options['cache'] ?? null) ? $options['cache'] : $root . '/.cache/ontologies');
+$output = is_string($options['output'] ?? null) ? $options['output'] : $root . '/src/Vocabulary/Generated';
+
+$editions = Edition::cases();
+fwrite(STDOUT, sprintf("Generating vocabulary for editions %s into %s\n", implode(', ', array_map(static fn(Edition $e): string => $e->value, $editions)), $output));
+
+$written = (new VocabularyGenerator($source, $output))->generate($editions);
+foreach ($written as $file) {
+    fwrite(STDOUT, '  ' . str_replace($root . '/', '', $file) . "\n");
+}
+fwrite(STDOUT, sprintf("%d files written.\n", count($written)));

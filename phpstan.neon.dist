@@ -12,8 +12,10 @@ parameters:
         - bin
         - docs/examples
     excludePaths:
-        # Generated constants: large, mechanical, checked by the regeneration diff instead.
-        - src/Vocabulary/Generated/*
+        # Generated constants are large and mechanical; the regeneration diff checks them.
+        # They stay visible as symbols (analyse, not analyseAndScan) so code using them type-checks.
+        analyse:
+            - src/Vocabulary/Generated/*
     treatPhpDocTypesAsCertain: false
     reportUnmatchedIgnoredErrors: true
 
