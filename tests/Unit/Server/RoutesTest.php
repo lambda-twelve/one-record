@@ -22,8 +22,9 @@ final class RoutesTest extends TestCase
         self::assertSame($names, array_values(array_unique($names)), 'names are unique');
         $patterns = array_map(static fn(Route $r): string => $r->pattern, $routes);
         self::assertSame($patterns, array_values(array_unique($patterns)), 'one row per pattern, methods merged');
-        $object = array_values(array_filter($routes, static fn(Route $r): bool => $r->pattern === '/logistics-objects/{id}'))[0];
-        self::assertSame(['GET', 'HEAD', 'PATCH', 'POST'], $object->methods, 'read, change request and verification on one pattern');
+        $object = array_values(array_filter($routes, static fn(Route $r): bool => $r->pattern === '/logistics-objects/{id}'));
+        self::assertCount(1, $object);
+        self::assertSame(['GET', 'HEAD', 'PATCH', 'POST'], $object[0]->methods, 'read, change request and verification on one pattern');
         foreach ($routes as $route) {
             self::assertSame(ApiVersion::V2_2_0, $route->since);
         }
