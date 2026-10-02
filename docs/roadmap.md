@@ -16,6 +16,14 @@ Status: :white_check_mark: done, :construction: in progress, :hourglass: planned
 | 8 | Interoperability suite against NE:ONE as an RDF comparison oracle | :white_check_mark: |
 | 9 | Documentation complete, first release 1.0.0-beta1 | :construction: |
 
+## What the first tag waits on
+
+Phases 0 to 8 are done and the documentation is complete. `1.0.0-beta1` is
+tagged when the maintainer gives the word, after the Laravel and Drupal
+wrappers have run their next round against this state; their first review
+round has been folded in (unit of work, completed store SPIs, the grant
+policy, storage form, shipped contract tests).
+
 ## Release numbering
 
 The first tag is **1.0.0-beta1**, not 0.1.0. By then the package serves and

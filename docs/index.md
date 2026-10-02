@@ -6,18 +6,21 @@ side (a data holder publishing logistics objects to partners) and the
 **client** side (talking to other parties' ONE Record servers), in one
 Composer package with no framework dependency.
 
-!!! warning "Under construction"
-    The package is being built in the open. Nothing is released yet. The
-    [roadmap](roadmap.md) shows what exists and what comes next.
+!!! info "Release status"
+    Feature complete for API 2.2.0 and 2.3.0 and heading for a first release
+    tagged `1.0.0-beta1`. Not on Packagist yet; install from Git. The
+    [roadmap](roadmap.md) shows what is done and what the tag waits on.
 
 ## Who it is for
 
 - **Freight forwarders, airlines, handlers and platforms** that need to publish
   or consume ONE Record data from a PHP system.
 - **Framework integrators.** The package is designed to be wrapped: a Laravel
-  wrapper (`lambda-twelve/one-record-laravel`) and a Drupal wrapper are planned.
-  The [SDK boundary](sdk-boundary.md) page says exactly what the SDK owns and
-  what a wrapper supplies.
+  wrapper (`lambda-twelve/one-record-laravel`) and a Drupal wrapper are being
+  built against it, and their first review round shaped the SPI. The
+  [SDK boundary](sdk-boundary.md) page says exactly what the SDK owns and what
+  a wrapper supplies; `Testing\Contract` ships the store contract tests a
+  wrapper runs against its own implementations.
 
 ## What it supports
 
@@ -53,7 +56,9 @@ runs and is tested with no framework at all.
 ## Quality signals
 
 Every push runs the test suite on PHP 8.3, 8.4 and 8.5 with lowest and highest
-dependencies, PHPStan at level max with the SDK-boundary rule, the code style
-check, the vocabulary regeneration check and this site's build. The
-[test coverage report](https://lambda-twelve.github.io/one-record/coverage/)
+dependencies, PHPStan at level max with the SDK-boundary and layer rules, the
+code style check, the vocabulary regeneration check, the newman compliance
+collection for API 2.2.0 and 2.3.0 against `bin/serve`, and this site's build;
+pushes to `main` also run the [NE:ONE interoperability suite](compatibility/neone.md).
+The [test coverage report](https://lambda-twelve.github.io/one-record/coverage/)
 is published with the site on every change to `main`.
