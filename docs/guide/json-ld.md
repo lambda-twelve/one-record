@@ -63,7 +63,9 @@ The writer embeds every node that has triples of its own where it is first
 referenced (keeping `@id` for identified nodes), writes later references as
 `{"@id": …}`, writes nodes that only have types as typed references, sorts
 keys and values, and uses native JSON values only where the lexical form
-survives a round trip. Context coercions (`"@type": "xsd:anyURI"`,
+survives a round trip. Every `@id` is compacted against the context's
+prefixes, so a code-list or named-individual reference comes out as
+`{"@id": "cargo:ACTUAL"}` while object IRIs under a server stay absolute. Context coercions (`"@type": "xsd:anyURI"`,
 `"@type": "@id"`) and the default `@language` are honoured, so a response can
 be written in the same shape a partner used. Output always expands back to
 the same graph.

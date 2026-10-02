@@ -67,7 +67,7 @@ final class Writer
         $this->visited[$node->toNTriples()] = true;
         $out = [];
         if ($node instanceof Iri) {
-            $out['@id'] = $node->value;
+            $out['@id'] = $context->compactIri($node->value);
         } elseif (($this->references[$node->toNTriples()] ?? 0) > 1) {
             $out['@id'] = $node->toNTriples();
         }
@@ -117,17 +117,17 @@ final class Writer
 
         if ($about === [] || $alreadyWritten) {
             if ($term instanceof Iri && $coercion === Context::JSON_LD_ID) {
-                return $term->value;
+                return $context->compactIri($term->value);
             }
 
-            return ['@id' => $term instanceof Iri ? $term->value : $term->toNTriples()];
+            return ['@id' => $term instanceof Iri ? $context->compactIri($term->value) : $term->toNTriples()];
         }
         if ($onlyTypes && $term instanceof Iri) {
             $this->visited[$term->toNTriples()] = true;
             $types = array_map(static fn(Triple $t): string => $context->compactIri($t->object instanceof Iri ? $t->object->value : ''), $about);
             sort($types, SORT_STRING);
 
-            return ['@id' => $term->value, '@type' => \count($types) === 1 ? $types[0] : $types];
+            return ['@id' => $context->compactIri($term->value), '@type' => \count($types) === 1 ? $types[0] : $types];
         }
 
         return $this->nodeObject($graph, $term, $context, isRoot: false);
