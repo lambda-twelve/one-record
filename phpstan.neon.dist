@@ -16,12 +16,16 @@ parameters:
         # They stay visible as symbols (analyse, not analyseAndScan) so code using them type-checks.
         analyse:
             - src/Vocabulary/Generated/*
+            # Deliberate layer violations, analysed only by tests/Unit/Tools/PhpStan/LayerRuleTest.
+            - tests/Fixtures/Layers/*
     treatPhpDocTypesAsCertain: false
     reportUnmatchedIgnoredErrors: true
 
 rules:
     # The SDK must stay framework-free: src/ may only depend on itself, PSR interfaces and PHP.
     - LambdaTwelve\OneRecord\Tools\PhpStan\SdkBoundaryRule
+    # The layering inside src/: one table in tools/PhpStan/LayerRule.php, documented in docs/sdk-boundary.md.
+    - LambdaTwelve\OneRecord\Tools\PhpStan\LayerRule
 
 services:
     -

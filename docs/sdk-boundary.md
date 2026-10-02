@@ -20,6 +20,38 @@ and PHP itself.
 | Consumption of PSR-20 clock, PSR-3 logger, PSR-14 dispatcher | Bindings |
 | "Forget" as a first-class operation: closing access immediately and an SPI hook for the host's data-protection erasure | Retention policy and scheduling |
 
+## Layers inside the SDK
+
+The inside is layered too, and a second PHPStan rule (`tools/PhpStan/LayerRule.php`)
+enforces it from one table. Each layer is a namespace under
+`LambdaTwelve\OneRecord`; the longest matching prefix wins, so `Server\Spi`
+is its own layer while `Server\Endpoint` belongs to `Server`. A layer may
+depend on itself and on what its row lists; everything else fails the build.
+
+| Layer | May depend on | Why |
+| --- | --- | --- |
+| `Spec` | nothing | Versions and namespaces: constants everything reads |
+| `Rdf` | `Spec` | Terms, triples, graphs |
+| `Vocabulary` | `Spec`, `Rdf` | The generated ontology terms and questions about them |
+| `JsonLd` | `Spec`, `Rdf`, `Vocabulary` | The restricted JSON-LD processor and node helpers |
+| `Model` | the four above | Logistics objects, events, builders, local graphs |
+| `Change` | the above, `Model`, `Api` | `api:Change` is an API document with diff/apply logic |
+| `Api` | the above, `Model`, `Change` | Every other API document; an ActionRequest carries a Change |
+| `Auth` | `Spec`, `Rdf`, `Server\Spi` | Implements the `Authenticator` SPI and nothing else of the server |
+| `Server\Spi` | the document layers | What hosts implement: documents in, documents out, no server internals |
+| `Server\Event` | the document layers, `Server\Spi` | PSR-14 events |
+| `Server\InMemory` | `Server\Spi`, `Server\Event`, and the wiring classes `ServerConfig`, `Services`, `ServerBuilder`, `OneRecordServer`, `IdGenerator`, `SystemClock` | Reference stores and a complete server; never endpoint code |
+| `Server` | everything above it | Routing, HTTP, endpoints, lifecycle, fan-out |
+| `Client` | the document layers, `Auth` | Talks to other servers; must never reach into ours |
+
+`Change` and `Api` are a declared pair: a Change is itself an API document
+(`api:Change`) and lives in its own namespace only because of the size of its
+builder and applier. Nothing else may be circular.
+
+What this guarantees a wrapper: implementing the SPI needs only the document
+layers; replacing an in-memory store never pulls in endpoint code; and a
+future client package can be split off without touching the server.
+
 Business concepts (shipments, tenants, ERPs, carriers) never appear in the SDK.
 The SDK knows logistics objects, logistics events, action requests,
 subscriptions and notifications: the vocabulary of the specification and

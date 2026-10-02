@@ -82,3 +82,8 @@ it. From 1.0.0 on, breaking changes need a new major version.
 - `bin/serve`: the in-memory server under PHP's built-in web server with an
   OAuth 2.0 token endpoint, for development and the compliance collection.
 - `Server\Spi\Authenticator` and `Server\Spi\Agent`.
+- Architecture rule: a table-driven PHPStan rule (`tools/PhpStan/LayerRule.php`)
+  enforces the layering inside `src/` (documented in the SDK boundary page),
+  next to the existing rule that keeps `src/` free of anything but PSR and PHP.
+  `Api\Nodes` moved to `JsonLd\Nodes` and `Model\LogisticsEvent` throws
+  `ModelException` so the model no longer depends on the API layer.
