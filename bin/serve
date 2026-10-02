@@ -3,7 +3,241 @@
 
 declare(strict_types=1);
 
-// Example ONE Record server (php -S + in-memory stores) for compliance runs.
-// Implemented in roadmap phase 5.
-fwrite(STDERR, "bin/serve is not implemented yet.\n");
-exit(1);
+/*
+ * Example ONE Record server for development and the compliance collection.
+ *
+ * Runs the in-memory server under PHP's built-in web server. PHP starts a
+ * fresh process per request there, so the stores are serialised to a state
+ * file between requests; that file is a local cache, never shared data.
+ *
+ *   bin/serve [--host=127.0.0.1] [--port=8080] [--base-url=http://127.0.0.1:8080]
+ *             [--bulk] [--hide] [--client=<id>:<secret>:<agent IRI>]... [--state-dir=.cache/serve]
+ *   bin/serve --print-token=<client id>   print a bearer token for a configured client
+ *
+ * Two clients exist unless --client is given: "holder" (secret "holder-secret"),
+ * the data holder with internal access, and "partner" (secret "partner-secret"),
+ * an external party that starts with no permissions. Tokens come from
+ * POST /oauth/token (client_credentials) or --print-token. The RS256 key pair
+ * is generated into the state directory on first use.
+ *
+ * This is a development tool: it needs the dev dependencies (nyholm/psr7).
+ */
+
+use LambdaTwelve\OneRecord\Auth\InMemoryClientCredentials;
+use LambdaTwelve\OneRecord\Auth\Jwt\Rs256Signer;
+use LambdaTwelve\OneRecord\Auth\Jwt\Rs256Verifier;
+use LambdaTwelve\OneRecord\Auth\Jwt\StaticKeyResolver;
+use LambdaTwelve\OneRecord\Auth\JwtAuthenticator;
+use LambdaTwelve\OneRecord\Auth\TokenEndpoint;
+use LambdaTwelve\OneRecord\Model\Builder\ObjectBuilder;
+use LambdaTwelve\OneRecord\Rdf\Iri;
+use LambdaTwelve\OneRecord\Server\DataHolder;
+use LambdaTwelve\OneRecord\Server\InMemory\InMemoryServer;
+use LambdaTwelve\OneRecord\Server\InMemory\InMemoryState;
+use LambdaTwelve\OneRecord\Server\ServerConfig;
+use LambdaTwelve\OneRecord\Server\Spi\Decision;
+use LambdaTwelve\OneRecord\Server\SystemClock;
+use LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo;
+use Nyholm\Psr7\Factory\Psr17Factory;
+use Nyholm\Psr7Server\ServerRequestCreator;
+use Psr\EventDispatcher\EventDispatcherInterface;
+use Psr\Http\Message\ResponseInterface;
+
+foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
+    if (is_file($autoload)) {
+        require $autoload;
+        break;
+    }
+}
+if (!class_exists(Psr17Factory::class)) {
+    fwrite(STDERR, "bin/serve needs the development dependencies: run composer install.\n");
+    exit(1);
+}
+
+/**
+ * @return array{host: string, port: int, baseUrl: string, bulk: bool, denial: string, clients: array<string, array{secret: string, agent: string, internal: bool}>, stateDir: string, printToken: ?string}
+ */
+function serve_options(array $argv): array
+{
+    $options = ['host' => '127.0.0.1', 'port' => 8080, 'baseUrl' => null, 'bulk' => false, 'denial' => 'forbid', 'clients' => [], 'stateDir' => '.cache/serve', 'printToken' => null];
+    foreach (array_slice($argv, 1) as $argument) {
+        if (preg_match('/^--([a-z-]+)(?:=(.*))?$/', $argument, $m) !== 1) {
+            fwrite(STDERR, "Unknown argument $argument\n");
+            exit(64);
+        }
+        $value = $m[2] ?? '';
+        switch ($m[1]) {
+            case 'host': $options['host'] = $value;
+                break;
+            case 'port': $options['port'] = (int) $value;
+                break;
+            case 'base-url': $options['baseUrl'] = rtrim($value, '/');
+                break;
+            case 'bulk': $options['bulk'] = true;
+                break;
+            case 'hide': $options['denial'] = 'hide';
+                break;
+            case 'state-dir': $options['stateDir'] = $value;
+                break;
+            case 'print-token': $options['printToken'] = $value;
+                break;
+            case 'client':
+                $parts = explode(':', $value, 3);
+                if (count($parts) !== 3) {
+                    fwrite(STDERR, "--client expects <id>:<secret>:<agent IRI>\n");
+                    exit(64);
+                }
+                $options['clients'][$parts[0]] = ['secret' => $parts[1], 'agent' => $parts[2], 'internal' => $options['clients'] === []];
+                break;
+            case 'help': fwrite(STDOUT, "Usage: bin/serve [--host=] [--port=] [--base-url=] [--bulk] [--hide] [--client=id:secret:agent]... [--state-dir=] | --print-token=<client>\n");
+                exit(0);
+            default: fwrite(STDERR, "Unknown option --{$m[1]}\n");
+                exit(64);
+        }
+    }
+    $options['baseUrl'] ??= sprintf('http://%s:%d', $options['host'], $options['port']);
+    if ($options['clients'] === []) {
+        $options['clients'] = [
+            'holder' => ['secret' => 'holder-secret', 'agent' => $options['baseUrl'] . '/logistics-objects/holder', 'internal' => true],
+            'partner' => ['secret' => 'partner-secret', 'agent' => 'https://partner.example/logistics-objects/partner', 'internal' => false],
+        ];
+    }
+
+    return $options;
+}
+
+function serve_key(string $stateDir): string
+{
+    $path = $stateDir . '/key.pem';
+    if (!is_file($path)) {
+        if (!is_dir($stateDir) && !mkdir($stateDir, 0700, true)) {
+            fwrite(STDERR, "Cannot create $stateDir\n");
+            exit(1);
+        }
+        $key = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+        if ($key === false || !openssl_pkey_export($key, $pem) || !is_string($pem)) {
+            fwrite(STDERR, "Cannot generate the RS256 key pair\n");
+            exit(1);
+        }
+        file_put_contents($path, $pem);
+        chmod($path, 0600);
+    }
+
+    return (string) file_get_contents($path);
+}
+
+/**
+ * @param array<string, array{secret: string, agent: string, internal: bool}> $clients
+ */
+function serve_build(array $options, ?InMemoryState $state, array $clients): InMemoryServer
+{
+    $clock = new SystemClock();
+    $signer = new Rs256Signer(serve_key($options['stateDir']), $options['baseUrl'], $clock);
+    $authenticator = new JwtAuthenticator(new Rs256Verifier(new StaticKeyResolver([$options['baseUrl'] => $signer->publicKeyPem()]), $clock));
+    $factory = new Psr17Factory();
+    $dispatcher = new class implements EventDispatcherInterface {
+        public function dispatch(object $event): object
+        {
+            return $event;
+        }
+    };
+    $holderAgent = null;
+    foreach ($clients as $client) {
+        if ($client['internal']) {
+            $holderAgent ??= $client['agent'];
+        }
+    }
+    $config = new ServerConfig($options['baseUrl'], new Iri($holderAgent ?? $options['baseUrl'] . '/logistics-objects/holder'), bulkLogisticsEvents: $options['bulk'], dataHolderType: Cargo::Company);
+    $fresh = $state === null;
+    $server = new InMemoryServer($config, $authenticator, $clock, $dispatcher, $factory, $factory, denial: $options['denial'] === 'hide' ? Decision::Hide : Decision::Forbid, state: $state);
+    if ($fresh) {
+        foreach ($clients as $client) {
+            if ($client['internal']) {
+                $server->policy->addInternal(new Iri($client['agent']));
+            }
+        }
+        (new DataHolder($server->services))->create(ObjectBuilder::of(Cargo::Company)->set(Cargo::name, 'Example data holder')->build($config->dataHolder));
+    }
+
+    return $server;
+}
+
+function serve_token_endpoint(array $options, array $clients): TokenEndpoint
+{
+    $credentials = new InMemoryClientCredentials();
+    foreach ($clients as $id => $client) {
+        $credentials->add($id, $client['secret'], new Iri($client['agent']));
+    }
+    $factory = new Psr17Factory();
+
+    return new TokenEndpoint($credentials, new Rs256Signer(serve_key($options['stateDir']), $options['baseUrl'], new SystemClock()), $factory, $factory);
+}
+
+function serve_emit(ResponseInterface $response): void
+{
+    $status = $response->getStatusCode();
+    header(sprintf('HTTP/%s %d %s', $response->getProtocolVersion(), $status, $response->getReasonPhrase()), true, $status);
+    foreach ($response->getHeaders() as $name => $values) {
+        foreach ($values as $i => $value) {
+            // The status is repeated on purpose: PHP turns a Location header into a 302 otherwise.
+            header($name . ': ' . $value, $i === 0, $status);
+        }
+    }
+    echo (string) $response->getBody();
+}
+
+if (PHP_SAPI === 'cli-server') {
+    // One request of the built-in server: reload the state, handle, save.
+    $options = json_decode((string) getenv('ONE_RECORD_SERVE'), true, 512, JSON_THROW_ON_ERROR);
+    $clients = $options['clients'];
+    $stateFile = $options['stateDir'] . '/state.bin';
+    $lock = fopen($options['stateDir'] . '/state.lock', 'c');
+    if ($lock === false || !flock($lock, LOCK_EX)) {
+        http_response_code(500);
+        exit;
+    }
+    $request = (new ServerRequestCreator(new Psr17Factory(), new Psr17Factory(), new Psr17Factory(), new Psr17Factory()))->fromGlobals();
+    if ($request->getUri()->getPath() === '/oauth/token') {
+        serve_emit(serve_token_endpoint($options, $clients)->handle($request));
+        exit;
+    }
+    $state = null;
+    if (is_file($stateFile)) {
+        // The file is this tool's own cache, written by the previous request; nothing else writes it.
+        $loaded = unserialize((string) file_get_contents($stateFile), ['allowed_classes' => true]);
+        $state = $loaded instanceof InMemoryState ? $loaded : null;
+    }
+    $server = serve_build($options, $state, $clients);
+    $response = $server->handler->handle($request);
+    file_put_contents($stateFile, serialize($server->state));
+    serve_emit($response);
+    flock($lock, LOCK_UN);
+    exit;
+}
+
+$options = serve_options($argv);
+if ($options['printToken'] !== null) {
+    $client = $options['clients'][$options['printToken']] ?? null;
+    if ($client === null) {
+        fwrite(STDERR, sprintf("No client \"%s\"; known: %s\n", $options['printToken'], implode(', ', array_keys($options['clients']))));
+        exit(1);
+    }
+    $signer = new Rs256Signer(serve_key($options['stateDir']), $options['baseUrl'], new SystemClock());
+    echo $signer->sign(['sub' => $options['printToken'], 'logistics_agent_uri' => $client['agent']], 3600), "\n";
+    exit(0);
+}
+
+if (!is_dir($options['stateDir']) && !mkdir($options['stateDir'], 0700, true)) {
+    fwrite(STDERR, "Cannot create {$options['stateDir']}\n");
+    exit(1);
+}
+serve_key($options['stateDir']);
+@unlink($options['stateDir'] . '/state.bin');
+putenv('ONE_RECORD_SERVE=' . json_encode($options, JSON_THROW_ON_ERROR));
+fwrite(STDERR, sprintf("ONE Record example server on %s (base URL %s)\n", $options['host'] . ':' . $options['port'], $options['baseUrl']));
+foreach ($options['clients'] as $id => $client) {
+    fwrite(STDERR, sprintf("  client %-8s secret %-16s agent %s%s\n", $id, $client['secret'], $client['agent'], $client['internal'] ? ' (data holder)' : ''));
+}
+fwrite(STDERR, "  POST /oauth/token with grant_type=client_credentials for a token; GET / for server information.\n");
+passthru(sprintf('%s -S %s -t %s %s', escapeshellarg(PHP_BINARY), escapeshellarg($options['host'] . ':' . $options['port']), escapeshellarg($options['stateDir']), escapeshellarg(__FILE__)), $exit);
+exit($exit);

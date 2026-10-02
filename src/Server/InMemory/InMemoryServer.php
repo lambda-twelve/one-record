@@ -24,6 +24,7 @@ use Psr\Log\LoggerInterface;
  */
 final class InMemoryServer
 {
+    public readonly InMemoryState $state;
     public readonly InMemoryLogisticsObjectStore $objects;
     public readonly InMemoryLogisticsEventStore $events;
     public readonly InMemoryActionRequestStore $actionRequests;
@@ -34,6 +35,9 @@ final class InMemoryServer
     public readonly Services $services;
     public readonly OneRecordServer $handler;
 
+    /**
+     * @param ?InMemoryState $state stores to continue from (bin/serve reloads them between requests); fresh ones when null
+     */
     public function __construct(
         ServerConfig $config,
         Authenticator $authenticator,
@@ -44,14 +48,16 @@ final class InMemoryServer
         ?LoggerInterface $logger = null,
         Decision $denial = Decision::Forbid,
         ?IdGenerator $ids = null,
+        ?InMemoryState $state = null,
     ) {
-        $this->objects = new InMemoryLogisticsObjectStore();
-        $this->events = new InMemoryLogisticsEventStore();
-        $this->actionRequests = new InMemoryActionRequestStore();
-        $this->subscriptions = new InMemorySubscriptionStore($this->actionRequests);
-        $this->delegations = new InMemoryAccessDelegationStore();
-        $this->outbox = new InMemoryNotificationOutbox();
-        $this->policy = new InMemoryAccessPolicy($this->delegations, $clock, $denial);
+        $this->state = $state ?? new InMemoryState($clock, $denial);
+        $this->objects = $this->state->objects;
+        $this->events = $this->state->events;
+        $this->actionRequests = $this->state->actionRequests;
+        $this->subscriptions = $this->state->subscriptions;
+        $this->delegations = $this->state->delegations;
+        $this->outbox = $this->state->outbox;
+        $this->policy = $this->state->policy;
         $this->services = new Services(
             $config,
             $this->objects,
