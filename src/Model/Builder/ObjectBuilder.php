@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace LambdaTwelve\OneRecord\Model\Builder;
 
+use DateTimeImmutable;
 use LambdaTwelve\OneRecord\Model\LocalRef;
+use LambdaTwelve\OneRecord\Model\LogisticsEvent;
 use LambdaTwelve\OneRecord\Model\LogisticsObject;
 use LambdaTwelve\OneRecord\Model\ModelException;
 use LambdaTwelve\OneRecord\Rdf\BlankNode;
@@ -13,6 +15,7 @@ use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Rdf\Literal;
 use LambdaTwelve\OneRecord\Rdf\Triple;
 use LambdaTwelve\OneRecord\Spec\Namespaces;
+use LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo;
 use LambdaTwelve\OneRecord\Vocabulary\PropertyInfo;
 use LambdaTwelve\OneRecord\Vocabulary\PropertyKind;
 use LambdaTwelve\OneRecord\Vocabulary\Vocabulary;
@@ -41,6 +44,7 @@ final class ObjectBuilder
         private readonly array $types,
         ?Vocabulary $vocabulary,
         private readonly bool $strict,
+        private readonly bool $event = false,
     ) {
         $this->vocabulary = $vocabulary ?? Vocabulary::default();
         foreach ($types as $type) {
@@ -48,8 +52,11 @@ final class ObjectBuilder
                 throw new ModelException(\sprintf('"%s" is not a class of the ontology.', $type));
             }
         }
-        if ($strict && array_filter($types, fn(string $t): bool => $this->vocabulary->isLogisticsObjectClass($t)) === []) {
-            throw new ModelException(\sprintf('%s is not a logistics object class; embedded objects are built with Embedded::of().', implode(', ', $types)));
+        if ($strict && $event && array_filter($types, fn(string $t): bool => $t === Cargo::LogisticsEvent || $this->vocabulary->isSubclassOf($t, Cargo::LogisticsEvent)) === []) {
+            throw new ModelException(\sprintf('%s is not a logistics event class.', implode(', ', $types)));
+        }
+        if ($strict && !$event && array_filter($types, fn(string $t): bool => $this->vocabulary->isLogisticsObjectClass($t)) === []) {
+            throw new ModelException(\sprintf('%s is not a logistics object class; embedded objects are built with Embedded::of(), events with ObjectBuilder::ofEvent().', implode(', ', $types)));
         }
     }
 
@@ -69,6 +76,16 @@ final class ObjectBuilder
     public static function ofTypes(array $types, ?Vocabulary $vocabulary = null): self
     {
         return new self($types, $vocabulary, strict: true);
+    }
+
+    /**
+     * A logistics event (cargo:LogisticsEvent or a subclass such as 3.3's
+     * StatusUpdateEvent), validated against the event class's properties.
+     * Finish with buildEvent().
+     */
+    public static function ofEvent(string $type = Cargo::LogisticsEvent, ?Vocabulary $vocabulary = null): self
+    {
+        return new self([$type], $vocabulary, strict: true, event: true);
     }
 
     /**
@@ -125,7 +142,31 @@ final class ObjectBuilder
 
     public function build(Iri $iri): LogisticsObject
     {
+        if ($this->event) {
+            throw new ModelException('An event builder finishes with buildEvent().');
+        }
+
         return new LogisticsObject($iri, $this->buildGraph($iri));
+    }
+
+    /**
+     * The event with its URI under the object; cargo:eventFor is set to the
+     * object unless given, and cargo:eventDate is required as the spec says.
+     */
+    public function buildEvent(Iri $iri, Iri $logisticsObject, DateTimeImmutable $created): LogisticsEvent
+    {
+        if (!$this->event) {
+            throw new ModelException('buildEvent() is for builders made with ofEvent().');
+        }
+        if (!isset($this->properties[Cargo::eventDate])) {
+            throw new ModelException('Every logistics event must have a cargo:eventDate.');
+        }
+        $graph = $this->buildGraph($iri);
+        if ($graph->objects($iri, Cargo::eventFor) === []) {
+            $graph->add(new Triple($iri, new Iri(Cargo::eventFor), $logisticsObject));
+        }
+
+        return new LogisticsEvent($iri, $logisticsObject, $graph, $created);
     }
 
     /**

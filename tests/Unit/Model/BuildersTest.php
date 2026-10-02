@@ -12,6 +12,7 @@ use LambdaTwelve\OneRecord\Model\Builder\ObjectBuilder;
 use LambdaTwelve\OneRecord\Model\Builder\Values;
 use LambdaTwelve\OneRecord\Model\LocalGraph;
 use LambdaTwelve\OneRecord\Model\LocalRef;
+use LambdaTwelve\OneRecord\Model\LogisticsEvent;
 use LambdaTwelve\OneRecord\Model\LogisticsObject;
 use LambdaTwelve\OneRecord\Model\ModelException;
 use LambdaTwelve\OneRecord\Model\ResolvedGraph;
@@ -275,5 +276,46 @@ final class BuildersTest extends TestCase
         self::assertTrue(Uuid::isValid($a));
         self::assertSame('5', $a[14]);
         self::assertSame('7fc81d1d-6c75-568b-9e47-48c947ed2a07', Uuid::v5('8efaab7c-cfd5-11ed-9abe-325096b39f47', 'value'), "the spec's own uuid5 example");
+    }
+
+    public function testEventsAreBuiltValidatedAndRehydrated(): void
+    {
+        $object = new Iri('https://1r.example.com/logistics-objects/piece-1');
+        $iri = new Iri($object->value . '/logistics-events/e1');
+        $created = new DateTimeImmutable('2026-10-02T12:00:00Z');
+        $event = ObjectBuilder::ofEvent()
+            ->set(Cargo::eventDate, Values::dateTime(new DateTimeImmutable('2026-10-02T11:00:00Z')))
+            ->set(Cargo::eventCode, Values::code('StatusCode', 'DEP'))
+            ->set(Cargo::eventName, 'Departed')
+            ->buildEvent($iri, $object, $created);
+
+        self::assertSame($iri->value, $event->iri->value);
+        self::assertSame($object->value, $event->logisticsObject->value);
+        self::assertSame($object->value, $event->graph->firstObject($iri, Cargo::eventFor)?->toNTriples() === null ? null : $object->value, 'eventFor points at the object');
+        self::assertTrue($event->matchesCode('DEP'));
+        self::assertSame([Cargo::LogisticsEvent], $event->types());
+
+        $stored = LogisticsEvent::fromStored($iri, $object, $event->toJsonLd(), $created);
+        self::assertTrue((new Comparer())->isomorphic($event->graph, $stored->graph), 'what a store wrote reads back unchanged');
+        self::assertSame($created, $stored->created);
+
+        try {
+            ObjectBuilder::ofEvent()->set(Cargo::eventName, 'no date')->buildEvent($iri, $object, $created);
+            self::fail('eventDate is mandatory');
+        } catch (ModelException $e) {
+            self::assertStringContainsString('eventDate', $e->getMessage());
+        }
+        try {
+            ObjectBuilder::ofEvent()->set(Cargo::coload, true);
+            self::fail('coload is not an event property');
+        } catch (ModelException) {
+        }
+        try {
+            ObjectBuilder::ofEvent(Cargo::Piece);
+            self::fail('a Piece is not an event');
+        } catch (ModelException) {
+        }
+        $this->expectException(ModelException::class);
+        ObjectBuilder::of(Cargo::LogisticsEvent);
     }
 }

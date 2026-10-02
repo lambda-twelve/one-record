@@ -119,6 +119,18 @@ final readonly class ActionRequest
     }
 
     /**
+     * The form a store keeps: every property this package knows, whatever
+     * version partners negotiate. Read back with fromJsonLd(), which accepts
+     * every edition's properties as optional.
+     *
+     * @return array<string, mixed>
+     */
+    public function toStorageJsonLd(): array
+    {
+        return $this->toJsonLd(ApiVersion::latest());
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function toJsonLd(ApiVersion $version): array

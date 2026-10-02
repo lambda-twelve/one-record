@@ -31,6 +31,32 @@ final readonly class LogisticsEvent
     ) {}
 
     /**
+     * Rebuilds an event a store wrote with toJsonLd(): no validation, no
+     * re-rooting beyond giving a blank root its URI. Stores use this; the
+     * server uses fromJsonLd() for what partners post.
+     *
+     * @param string|array<string, mixed> $json
+     */
+    public static function fromStored(Iri $iri, Iri $logisticsObject, string|array $json, DateTimeImmutable $created): self
+    {
+        $document = JsonLd::expand($json, $iri);
+        $graph = $document->graph;
+        if (!$document->root->equals($iri)) {
+            $renamed = new Graph();
+            foreach ($graph as $triple) {
+                $renamed->add(new Triple(
+                    $triple->subject->equals($document->root) ? $iri : $triple->subject,
+                    $triple->predicate,
+                    $triple->object->equals($document->root) ? $iri : $triple->object,
+                ));
+            }
+            $graph = $renamed;
+        }
+
+        return new self($iri, $logisticsObject, $graph, $created);
+    }
+
+    /**
      * Reads a posted event body and gives it its URI under the object.
      *
      * @param string|array<string, mixed> $json
