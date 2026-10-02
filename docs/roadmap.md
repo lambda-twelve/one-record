@@ -7,8 +7,8 @@ Status: :white_check_mark: done, :construction: in progress, :hourglass: planned
 | --- | --- | --- |
 | 0 | Skeleton: Composer package, DDEV, PHPUnit 11, PHPStan max with the SDK-boundary rule, php-cs-fixer, CI, this site | :white_check_mark: |
 | 1 | Vocabulary generator: Turtle reader, generated classes/properties/individuals/code lists for data model 3.2 and 3.3 with per-term version metadata, regeneration check in CI | :white_check_mark: |
-| 2 | JSON-LD subset: reader, writer, expansion to triples, graph comparison modulo blank nodes | :construction: |
-| 3 | Model, local-key graph, value builders, change diff and change applier | :hourglass: |
+| 2 | JSON-LD subset: reader, writer, expansion to triples, graph comparison modulo blank nodes | :white_check_mark: |
+| 3 | Model, local-key graph, value builders, change diff and change applier | :construction: |
 | 4 | RS256 JWT verifier/signer, JWKS resolver, client-credentials token endpoint | :hourglass: |
 | 5 | Server: SPI, in-memory stores, every API 2.2/2.3 endpoint, action-request lifecycle, notification fan-out, `bin/serve` | :hourglass: |
 | 6 | Compliance collection (newman) run for API 2.2.0 and 2.3.0 in CI | :hourglass: |

@@ -26,3 +26,12 @@ All notable changes to this package are recorded here. The format follows
   membership) and version-limited views.
 - `bin/generate-vocabulary`: regenerates the vocabulary from IATA's ontologies
   at pinned commits; CI fails on a diff.
+- `JsonLd`: the restricted JSON-LD processor ONE Record needs. `Expander`
+  turns a compacted document into triples (inline object contexts with
+  prefixes, `@vocab`, `@base`, `@language` and `@type`-coercing term
+  definitions; `@id`, `@type`, value objects, arrays, embedded objects and
+  references) and rejects everything outside that subset with a message
+  naming the construct and its path. `Writer` compacts a graph back to
+  deterministic JSON-LD. `Comparer` decides graph isomorphism modulo blank-node
+  labels, with embedded-object IRIs (`internal:`, `neone:`) treated as blank
+  nodes and numeric literals normalised; `Diff` reports the differing triples.
