@@ -143,7 +143,7 @@ final class Expander
             }
 
             $predicate = new Iri($context->expandIri($key, $here, vocabRelative: true));
-            $coercion = $context->coercionOf($predicate->value);
+            $coercion = $context->coercionOfTerm($key);
             $values = \is_array($value) && array_is_list($value) ? $value : [$value];
             foreach ($values as $index => $item) {
                 if ($item === null) {

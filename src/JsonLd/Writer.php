@@ -67,8 +67,10 @@ final class Writer
         $this->visited[$node->toNTriples()] = true;
         $out = [];
         if ($node instanceof Iri) {
-            $out['@id'] = $context->compactIri($node->value);
-        } elseif (($this->references[$node->toNTriples()] ?? 0) > 1) {
+            $out['@id'] = $context->compactIri($node->value, vocabRelative: false);
+        } elseif (($this->references[$node->toNTriples()] ?? 0) > 1 || ($isRoot && ($this->references[$node->toNTriples()] ?? 0) >= 1)) {
+            // A blank root that anything references (itself included) needs a label, or the reference
+            // becomes a different anonymous node on reading (AR-009).
             $out['@id'] = $node->toNTriples();
         }
 
@@ -93,7 +95,8 @@ final class Writer
         }
         ksort($compactKeys, SORT_STRING);
         foreach ($compactKeys as $key => $predicate) {
-            $coercion = $context->coercionOf($predicate);
+            // The key written is the term; its own definition decides the coercion, as on reading.
+            $coercion = $context->coercionOfTerm($context->compactIri($predicate));
             $values = $properties[$predicate];
             usort($values, static fn(Term $a, Term $b): int => strcmp($a->toNTriples(), $b->toNTriples()));
             $written = array_map(fn(Term $term): mixed => $this->value($graph, $term, $context, $coercion), $values);
@@ -117,17 +120,17 @@ final class Writer
 
         if ($about === [] || $alreadyWritten) {
             if ($term instanceof Iri && $coercion === Context::JSON_LD_ID) {
-                return $context->compactIri($term->value);
+                return $context->compactIri($term->value, vocabRelative: false);
             }
 
-            return ['@id' => $term instanceof Iri ? $context->compactIri($term->value) : $term->toNTriples()];
+            return ['@id' => $term instanceof Iri ? $context->compactIri($term->value, vocabRelative: false) : $term->toNTriples()];
         }
         if ($onlyTypes && $term instanceof Iri) {
             $this->visited[$term->toNTriples()] = true;
             $types = array_map(static fn(Triple $t): string => $context->compactIri($t->object instanceof Iri ? $t->object->value : ''), $about);
             sort($types, SORT_STRING);
 
-            return ['@id' => $context->compactIri($term->value), '@type' => \count($types) === 1 ? $types[0] : $types];
+            return ['@id' => $context->compactIri($term->value, vocabRelative: false), '@type' => \count($types) === 1 ? $types[0] : $types];
         }
 
         return $this->nodeObject($graph, $term, $context, isRoot: false);

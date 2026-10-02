@@ -283,4 +283,25 @@ final class ExpanderTest extends TestCase
         $this->expectExceptionMessage('next to a top-level @graph');
         JsonLd::expand(['@context' => ['@vocab' => self::CARGO], '@graph' => [['@id' => 'https://x.example/1']], 'name' => 'no']);
     }
+
+    public function testAr008RelativeReferencesResolveAndCoercionFollowsTheActiveTerm(): void
+    {
+        $doc = JsonLd::expand(['@context' => ['cargo' => self::CARGO, '@base' => 'https://example/a/b'], '@id' => '../c', '@type' => 'cargo:Piece']);
+        self::assertSame('https://example/c', $doc->rootIri()?->value);
+        foreach (['x' => 'https://example/a/x', '/y' => 'https://example/y', '?q=1' => 'https://example/a/b?q=1', '#f' => 'https://example/a/b#f', '//other/z' => 'https://other/z', './' => 'https://example/a/', 'https://abs/' => 'https://abs/'] as $ref => $expected) {
+            self::assertSame($expected, JsonLd::expand(['@context' => ['cargo' => self::CARGO, '@base' => 'https://example/a/b'], '@id' => $ref, '@type' => 'cargo:Piece'])->rootIri()?->value, $ref);
+        }
+
+        // "link" is coerced to @id, but the value under the distinct key cargo:goodsDescription stays a string.
+        $doc = JsonLd::expand([
+            '@context' => ['cargo' => self::CARGO, 'link' => ['@id' => 'cargo:goodsDescription', '@type' => '@id']],
+            '@id' => 'https://example/p',
+            'cargo:goodsDescription' => 'https://example/text',
+        ]);
+        $value = $doc->graph->firstObject(new Iri('https://example/p'), self::CARGO . 'goodsDescription');
+        self::assertInstanceOf(Literal::class, $value, 'an unused alias must not reinterpret another key');
+        self::assertSame('https://example/text', $value->lexical);
+        $viaAlias = JsonLd::expand(['@context' => ['cargo' => self::CARGO, 'link' => ['@id' => 'cargo:goodsDescription', '@type' => '@id']], '@id' => 'https://example/p', 'link' => 'https://example/text']);
+        self::assertInstanceOf(Iri::class, $viaAlias->graph->firstObject(new Iri('https://example/p'), self::CARGO . 'goodsDescription'), 'the alias itself still coerces');
+    }
 }

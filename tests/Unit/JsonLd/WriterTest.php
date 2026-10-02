@@ -154,4 +154,42 @@ final class WriterTest extends TestCase
 
         self::assertSame(['https://onerecord.iata.org/ns/cargo#name' => 'x'], (new Writer())->write($graph, new BlankNode('r'), new Context()));
     }
+
+    public function testAr007WhatTheWriterEmitsReadsBackAsTheSameGraph(): void
+    {
+        $comparer = new Comparer();
+        // A typed alias for a cargo property.
+        $aliased = ['@context' => ['cargo' => 'https://onerecord.iata.org/ns/cargo#', 'name' => ['@id' => 'cargo:goodsDescription', '@type' => 'http://www.w3.org/2001/XMLSchema#string']], '@id' => 'https://example/p', 'name' => 'Books'];
+        $doc = JsonLd::expand($aliased);
+        $written = (new Writer())->write($doc->graph, $doc->root, $doc->context);
+        $context = $written['@context'];
+        self::assertIsArray($context);
+        self::assertIsArray($context['name']);
+        self::assertSame('cargo:goodsDescription', $context['name']['@id'] ?? null, 'the definition keeps its @id');
+        self::assertTrue($comparer->isomorphic($doc->graph, JsonLd::expand($written)->graph));
+
+        // @vocab for cargo with an absolute root: the @id must not become the relative "Piece".
+        $vocab = ['@context' => ['@vocab' => 'https://onerecord.iata.org/ns/cargo#'], '@id' => 'https://onerecord.iata.org/ns/cargo#Piece', 'goodsDescription' => 'Books'];
+        $doc = JsonLd::expand($vocab);
+        $written = (new Writer())->write($doc->graph, $doc->root, $doc->context);
+        self::assertSame('https://onerecord.iata.org/ns/cargo#Piece', $written['@id']);
+        self::assertTrue($comparer->isomorphic($doc->graph, JsonLd::expand($written)->graph));
+    }
+
+    public function testAr009AReferencedBlankRootKeepsItsIdentity(): void
+    {
+        $comparer = new Comparer();
+        foreach ([
+            ['@id' => '_:x', 'https://example/p' => ['@id' => '_:x']],
+            ['@id' => '_:x', 'https://example/p' => ['@id' => '_:y', 'https://example/p' => ['@id' => '_:x']]],
+        ] as $json) {
+            $doc = JsonLd::expand($json);
+            $written = (new Writer())->write($doc->graph, $doc->root, $doc->context);
+            self::assertArrayHasKey('@id', $written, 'a root that is referenced needs a label');
+            self::assertTrue($comparer->isomorphic($doc->graph, JsonLd::expand($written)->graph), json_encode($written, JSON_THROW_ON_ERROR));
+        }
+        // An unreferenced blank root still needs no label.
+        $doc = JsonLd::expand(['https://example/p' => 'x']);
+        self::assertArrayNotHasKey('@id', (new Writer())->write($doc->graph, $doc->root, $doc->context));
+    }
 }

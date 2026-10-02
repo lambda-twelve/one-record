@@ -152,10 +152,76 @@ final readonly class Context
             throw JsonLdException::at($path, \sprintf('"%s" is not a defined term and the context has no @vocab', $value));
         }
         if ($this->base !== null) {
-            return $this->base . $value;
+            // RFC 3986 reference resolution, not concatenation: "../c" against "https://x/a/b" is "https://x/c" (AR-008).
+            return self::resolveReference($this->base, $value);
         }
 
         throw JsonLdException::at($path, \sprintf('"%s" is a relative IRI and the context has no @base', $value));
+    }
+
+    /**
+     * RFC 3986 §5.2 for the references JSON-LD allows against @base: absolute,
+     * network-path, absolute-path, relative-path, query-only and fragment-only.
+     */
+    public static function resolveReference(string $base, string $reference): string
+    {
+        if (preg_match('/^[A-Za-z][A-Za-z0-9+.-]*:/', $reference) === 1) {
+            return $reference;
+        }
+        $b = parse_url($base);
+        if ($b === false || !isset($b['scheme'])) {
+            return $base . $reference;
+        }
+        $authority = isset($b['host']) ? '//' . (isset($b['user']) ? $b['user'] . (isset($b['pass']) ? ':' . $b['pass'] : '') . '@' : '') . $b['host'] . (isset($b['port']) ? ':' . $b['port'] : '') : '';
+        if (str_starts_with($reference, '//')) {
+            return $b['scheme'] . ':' . $reference;
+        }
+        $r = parse_url($reference);
+        if ($r === false) {
+            return $base . $reference;
+        }
+        $basePath = $b['path'] ?? '';
+        if ($reference === '' || str_starts_with($reference, '#')) {
+            return $b['scheme'] . ':' . $authority . $basePath . (isset($b['query']) ? '?' . $b['query'] : '') . $reference;
+        }
+        if (str_starts_with($reference, '?')) {
+            return $b['scheme'] . ':' . $authority . $basePath . $reference;
+        }
+        $path = $r['path'] ?? '';
+        if (!str_starts_with($path, '/')) {
+            $directory = $authority !== '' && $basePath === '' ? '/' : substr($basePath, 0, (int) strrpos($basePath, '/') + 1);
+            $path = $directory . $path;
+        }
+        // Remove dot segments (RFC 3986 §5.2.4).
+        $output = [];
+        foreach (explode('/', $path) as $i => $segment) {
+            if ($segment === '.') {
+                continue;
+            }
+            if ($segment === '..') {
+                if (\count($output) > 1) {
+                    array_pop($output);
+                }
+                continue;
+            }
+            $output[] = $segment;
+        }
+        $resolved = implode('/', $output);
+        if (str_ends_with($path, '/.') || str_ends_with($path, '/..')) {
+            $resolved .= '/';
+        }
+
+        return $b['scheme'] . ':' . $authority . $resolved . (isset($r['query']) ? '?' . $r['query'] : '') . (isset($r['fragment']) ? '#' . $r['fragment'] : '');
+    }
+
+    /**
+     * The coercion the term used as a key declares ("@id", a datatype IRI, or
+     * null). Only the active term counts: another alias of the same property
+     * with a different coercion must not change how this key's values read (AR-008).
+     */
+    public function coercionOfTerm(string $key): ?string
+    {
+        return $this->terms[$key]['type'] ?? null;
     }
 
     /**
@@ -174,21 +240,27 @@ final readonly class Context
     }
 
     /**
-     * The shortest compact form the context allows: a defined term, a compact
-     * IRI through the longest matching prefix, or the IRI itself.
+     * The shortest compact form the context allows. For keys and types
+     * ($vocabRelative): a defined term, @vocab, or a compact IRI through the
+     * longest matching prefix. For node identifiers (@id values) terms and
+     * @vocab do not apply (JSON-LD 1.1 IRI compaction), so only prefixes are
+     * used; otherwise "Piece" would be written where a reader sees a relative
+     * reference (AR-007).
      */
-    public function compactIri(string $iri): string
+    public function compactIri(string $iri, bool $vocabRelative = true): string
     {
-        foreach ($this->terms as $term => $definition) {
-            if ($definition['id'] === $iri) {
-                return $term;
+        if ($vocabRelative) {
+            foreach ($this->terms as $term => $definition) {
+                if ($definition['id'] === $iri) {
+                    return $term;
+                }
             }
         }
         $exact = array_search($iri, $this->prefixes, true);
         if ($exact !== false && $exact !== '') {
             return $exact;
         }
-        if ($this->vocab !== null && str_starts_with($iri, $this->vocab)) {
+        if ($vocabRelative && $this->vocab !== null && str_starts_with($iri, $this->vocab)) {
             $local = substr($iri, \strlen($this->vocab));
             if ($local !== '' && !str_contains($local, ':') && !str_contains($local, '/') && !str_contains($local, '#')) {
                 return $local;
@@ -225,7 +297,8 @@ final readonly class Context
             $raw['@language'] = $this->language;
         }
         foreach ($this->terms as $term => $definition) {
-            $entry = ['@id' => $this->compactIri($definition['id'])];
+            // Never compact a definition through the term it defines or through @vocab (AR-007).
+            $entry = ['@id' => $this->compactIri($definition['id'], false)];
             if ($definition['type'] !== null) {
                 $entry['@type'] = $definition['type'] === self::JSON_LD_ID ? self::JSON_LD_ID : $this->compactIri($definition['type']);
             }
