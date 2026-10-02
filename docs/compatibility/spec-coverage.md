@@ -46,6 +46,30 @@ assertions of its own.
 | `DELETE /action-requests/{id}` (revoke) | 2.2, 2.3 | implemented | 422 on a state that cannot be revoked at 2.3; 400 at 2.2. [ChangeRequestsTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/ChangeRequestsTest.php) |
 | `POST /oauth/token` (client credentials) | n/a | implemented | Not part of the ONE Record API; an optional helper component (`Auth\TokenEndpoint`). [TokenEndpointAndAuthenticatorTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Unit/Auth/TokenEndpointAndAuthenticatorTest.php) |
 
+## Client
+
+`Client\OneRecordClient` covers the same endpoints from the consuming side,
+negotiating the API version from the partner's server information. Proven by
+[OneRecordClientTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Unit/Client/OneRecordClientTest.php)
+against scripted answers and by
+[ClientAgainstServerTest](https://github.com/lambda-twelve/one-record/blob/main/tests/Integration/ClientAgainstServerTest.php)
+against this package's own server at both versions.
+
+| Client capability | Status | Notes |
+| --- | --- | --- |
+| Server information discovery, cached (PSR-16) | implemented | |
+| API version negotiation (highest common), forced version | implemented | 2.3-only properties read as optional |
+| Read / HEAD logistics objects, `?at=`, `?embedded=` | implemented | Revision metadata on the response object, stripped from the body |
+| Create object, change request, verification request | implemented | |
+| Audit trail with filters, parsed action requests | implemented | |
+| Post event, list / filter events, read event | implemented | |
+| Bulk events with per-object fallback | implemented | Falls back on 404/405 or at 2.2.0 |
+| Subscribe, query offered subscriptions, access delegation | implemented | Single `Subscription` or `Collection` answers |
+| Action requests: read, decide, revoke | implemented | |
+| Send notification | implemented | |
+| OAuth 2.0 client credentials token provider (PSR-18 + PSR-16) | implemented | `client_secret_post` and `client_secret_basic`, refresh before expiry |
+| Typed errors with the partner's `api:Error` | implemented | No automatic retries, by design |
+
 ## Cross-cutting
 
 | Rule | Status | Notes |

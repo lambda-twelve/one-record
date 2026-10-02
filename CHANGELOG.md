@@ -85,6 +85,13 @@ it. From 1.0.0 on, breaking changes need a new major version.
 - `bin/serve`: the in-memory server under PHP's built-in web server with an
   OAuth 2.0 token endpoint, for development and the compliance collection.
 - `Server\Spi\Authenticator` and `Server\Spi\Agent`.
+- `Client`: `OneRecordClient` over PSR-18 for every endpoint of a partner's
+  server, with server-information discovery, API version negotiation
+  (highest common version, 2.3-only properties optional on read), typed
+  errors carrying the partner's `api:Error` (`OneRecordHttpException`), a
+  bulk-event call that falls back to per-object posts, and
+  `ClientCredentialsTokenProvider` / `StaticTokenProvider` behind the
+  `TokenProvider` interface.
 - Architecture rule: a table-driven PHPStan rule (`tools/PhpStan/LayerRule.php`)
   enforces the layering inside `src/` (documented in the SDK boundary page),
   next to the existing rule that keeps `src/` free of anything but PSR and PHP.
