@@ -1,0 +1,120 @@
+<?php
+
+declare(strict_types=1);
+
+namespace LambdaTwelve\OneRecord\Tests\Unit\Auth;
+
+use DateInterval;
+use LambdaTwelve\OneRecord\Auth\JwksEndpoint;
+use LambdaTwelve\OneRecord\Auth\Jwt\ChainKeyResolver;
+use LambdaTwelve\OneRecord\Auth\Jwt\JwksKeyResolver;
+use LambdaTwelve\OneRecord\Auth\Jwt\Rs256Signer;
+use LambdaTwelve\OneRecord\Auth\Jwt\StaticKeyResolver;
+use LambdaTwelve\OneRecord\Tests\Support\FakeHttpClient;
+use LambdaTwelve\OneRecord\Tests\Support\FixedClock;
+use LambdaTwelve\OneRecord\Tests\Support\TestKeys;
+use Nyholm\Psr7\Factory\Psr17Factory;
+use Nyholm\Psr7\Response;
+use Nyholm\Psr7\ServerRequest;
+use PHPUnit\Framework\TestCase;
+use Psr\SimpleCache\CacheInterface;
+use RuntimeException;
+
+final class KeyResolversAndJwksEndpointTest extends TestCase
+{
+    public function testTheChainAsksResolversInOrderAndTheFirstThatKnowsTheIssuerWins(): void
+    {
+        $pinned = TestKeys::pair('pinned');
+        $other = TestKeys::pair('other');
+        $chain = new ChainKeyResolver(
+            new StaticKeyResolver(['https://pinned.example' => $pinned['public']]),
+            new StaticKeyResolver(['https://pinned.example' => $other['public'], 'https://second.example' => $other['public']]),
+        );
+
+        self::assertSame([$pinned['public']], $chain->publicKeys('https://pinned.example', null), 'the first resolver answers');
+        self::assertSame([$other['public']], $chain->publicKeys('https://second.example', null), 'the second is consulted when the first does not know the issuer');
+        self::assertSame([], $chain->publicKeys('https://nobody.example', null));
+    }
+
+    public function testJwksWorksWithoutACacheAndSurvivesABrokenOne(): void
+    {
+        $factory = new Psr17Factory();
+        $signer = new Rs256Signer(TestKeys::pair('jwks')['private'], 'https://idp.example', new FixedClock(), 'k1');
+        $jwks = json_encode(['keys' => [$signer->publicJwk()]], JSON_THROW_ON_ERROR);
+
+        $http = (new FakeHttpClient())->queue(new Response(200, [], $jwks))->queue(new Response(200, [], $jwks));
+        $resolver = new JwksKeyResolver(['https://idp.example' => 'https://idp.example/jwks'], $http, $factory);
+        self::assertCount(1, $resolver->publicKeys('https://idp.example', 'k1'));
+        self::assertCount(1, $resolver->publicKeys('https://idp.example', 'k1'));
+        self::assertCount(2, $http->requests, 'no cache: every resolution fetches');
+
+        $broken = new class implements CacheInterface {
+            public function get(string $key, mixed $default = null): mixed
+            {
+                throw new RuntimeException('redis down');
+            }
+
+            public function set(string $key, mixed $value, null|int|DateInterval $ttl = null): bool
+            {
+                throw new RuntimeException('redis down');
+            }
+
+            public function delete(string $key): bool
+            {
+                return true;
+            }
+
+            public function clear(): bool
+            {
+                return true;
+            }
+
+            public function getMultiple(iterable $keys, mixed $default = null): iterable
+            {
+                return [];
+            }
+
+            public function setMultiple(iterable $values, null|int|DateInterval $ttl = null): bool
+            {
+                return true;
+            }
+
+            public function deleteMultiple(iterable $keys): bool
+            {
+                return true;
+            }
+
+            public function has(string $key): bool
+            {
+                return false;
+            }
+        };
+        $http = (new FakeHttpClient())->queue(new Response(200, [], $jwks));
+        $resolver = new JwksKeyResolver(['https://idp.example' => 'https://idp.example/jwks'], $http, $factory, $broken);
+        self::assertCount(1, $resolver->publicKeys('https://idp.example', 'k1'), 'a failing cache is bypassed, not fatal');
+    }
+
+    public function testTheJwksEndpointPublishesTheSigningKeys(): void
+    {
+        $factory = new Psr17Factory();
+        $current = new Rs256Signer(TestKeys::pair('current')['private'], 'https://1r.example.com', new FixedClock(), 'current');
+        $retiring = new Rs256Signer(TestKeys::pair('retiring')['private'], 'https://1r.example.com', new FixedClock(), 'retiring');
+        $endpoint = new JwksEndpoint($factory, $factory, 600, $current, $retiring);
+
+        $response = $endpoint->handle(new ServerRequest('GET', 'https://1r.example.com/.well-known/jwks.json'));
+        self::assertSame(200, $response->getStatusCode());
+        self::assertSame('public, max-age=600', $response->getHeaderLine('Cache-Control'));
+        $document = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertIsArray($document);
+        self::assertIsArray($document['keys']);
+        self::assertSame(['current', 'retiring'], array_column($document['keys'], 'kid'));
+
+        // A verifier fed this document accepts a token from the current key.
+        $http = (new FakeHttpClient())->queue(new Response(200, [], (string) $response->getBody()));
+        $resolver = new JwksKeyResolver(['https://1r.example.com' => 'https://1r.example.com/.well-known/jwks.json'], $http, $factory);
+        self::assertSame([$current->publicKeyPem()], $resolver->publicKeys('https://1r.example.com', 'current'));
+
+        self::assertSame('', (string) $endpoint->handle(new ServerRequest('HEAD', 'https://1r.example.com/.well-known/jwks.json'))->getBody());
+        self::assertSame(405, $endpoint->handle(new ServerRequest('POST', 'https://1r.example.com/.well-known/jwks.json'))->getStatusCode());
+    }
+}

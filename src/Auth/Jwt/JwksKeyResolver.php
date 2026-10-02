@@ -11,13 +11,15 @@ use Psr\Http\Message\RequestFactoryInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Psr\SimpleCache\CacheInterface;
+use Throwable;
 
 /**
  * Public keys from an identity provider's JWKS document, as the spec's
  * security section describes: each trusted issuer maps to a JWKS URL (or the
  * well-known location under the issuer), documents are cached, and a token
  * naming a key id the cache does not know triggers one refresh so key
- * rotation needs no restart.
+ * rotation needs no restart. Without a cache every token costs a fetch; a
+ * cache that fails is logged and bypassed.
  */
 final class JwksKeyResolver implements KeyResolver
 {
@@ -28,7 +30,7 @@ final class JwksKeyResolver implements KeyResolver
         private readonly array $issuers,
         private readonly ClientInterface $http,
         private readonly RequestFactoryInterface $requests,
-        private readonly CacheInterface $cache,
+        private readonly ?CacheInterface $cache = null,
         private readonly int $ttlSeconds = 3600,
         private readonly LoggerInterface $logger = new NullLogger(),
     ) {}
@@ -55,8 +57,14 @@ final class JwksKeyResolver implements KeyResolver
     private function load(string $issuer, bool $refresh): array
     {
         $cacheKey = 'one-record.jwks.' . hash('sha256', $issuer);
-        if (!$refresh) {
-            $cached = $this->cache->get($cacheKey);
+        if (!$refresh && $this->cache !== null) {
+            try {
+                $cached = $this->cache->get($cacheKey);
+            } catch (Throwable $e) {
+                // A broken cache must not refuse tokens; it only costs a fetch.
+                $this->logger->warning('JWKS cache read failed', ['issuer' => $issuer, 'error' => $e->getMessage()]);
+                $cached = null;
+            }
             if (\is_array($cached)) {
                 /** @var array<string, string> $cached */
                 return $cached;
@@ -91,7 +99,13 @@ final class JwksKeyResolver implements KeyResolver
                 }
             }
         }
-        $this->cache->set($cacheKey, $keys, $this->ttlSeconds);
+        if ($this->cache !== null) {
+            try {
+                $this->cache->set($cacheKey, $keys, $this->ttlSeconds);
+            } catch (Throwable $e) {
+                $this->logger->warning('JWKS cache write failed', ['issuer' => $issuer, 'error' => $e->getMessage()]);
+            }
+        }
 
         return $keys;
     }

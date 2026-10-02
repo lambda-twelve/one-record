@@ -28,9 +28,38 @@ final class ServerBuilder
 {
     private function __construct() {}
 
+    /**
+     * The route table: every endpoint the server answers, with every method it
+     * handles. Hosts whose framework wants named routes iterate this instead of
+     * copying the patterns; a new endpoint in the SDK then needs no host change.
+     *
+     * @return list<Route>
+     */
+    public static function routes(bool $bulkLogisticsEvents = false): array
+    {
+        $routes = [
+            new Route('server-information', ['GET', 'HEAD'], '/'),
+            new Route('logistics-objects.create', ['POST'], '/logistics-objects'),
+            new Route('logistics-object', ['GET', 'HEAD', 'PATCH', 'POST'], '/logistics-objects/{id}'),
+            new Route('logistics-object.audit-trail', ['GET', 'HEAD'], '/logistics-objects/{id}/audit-trail'),
+            new Route('logistics-object.events', ['POST', 'GET', 'HEAD'], '/logistics-objects/{id}/logistics-events'),
+            new Route('logistics-object.event', ['GET', 'HEAD'], '/logistics-objects/{id}/logistics-events/{eventId}'),
+            new Route('notifications', ['POST'], '/notifications'),
+            new Route('subscriptions', ['GET', 'HEAD', 'POST'], '/subscriptions'),
+            new Route('access-delegations', ['POST'], '/access-delegations'),
+            new Route('action-request', ['GET', 'HEAD', 'PATCH', 'DELETE'], '/action-requests/{id}'),
+        ];
+        if ($bulkLogisticsEvents) {
+            $routes[] = new Route('logistics-events.bulk', ['POST'], '/logistics-events', ApiVersion::V2_3_0);
+        }
+
+        return $routes;
+    }
+
     public static function build(Services $services): OneRecordServer
     {
         $router = new Router();
+        // One Route may be served by several endpoint classes (GET, PATCH and POST on an object differ).
         $router->add(['GET', 'HEAD'], '/', new ServerInformationEndpoint($services));
         $router->add(['POST'], '/logistics-objects', new CreateLogisticsObjectEndpoint($services));
         $router->add(['GET', 'HEAD'], '/logistics-objects/{id}', new LogisticsObjectEndpoint($services));
