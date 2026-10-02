@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace LambdaTwelve\OneRecord\Server\InMemory;
 
-use LambdaTwelve\OneRecord\Server\IdGenerator;
 use LambdaTwelve\OneRecord\Server\OneRecordServer;
 use LambdaTwelve\OneRecord\Server\ServerBuilder;
 use LambdaTwelve\OneRecord\Server\ServerConfig;
 use LambdaTwelve\OneRecord\Server\Services;
 use LambdaTwelve\OneRecord\Server\Spi\Authenticator;
 use LambdaTwelve\OneRecord\Server\Spi\Decision;
+use LambdaTwelve\OneRecord\Server\Spi\IdGenerator;
+use LambdaTwelve\OneRecord\Server\Spi\UnitOfWork;
 use Psr\Clock\ClockInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
@@ -37,6 +38,7 @@ final class InMemoryServer
 
     /**
      * @param ?InMemoryState $state stores to continue from (bin/serve reloads them between requests); fresh ones when null
+     * @param ?UnitOfWork $unitOfWork the host's transaction boundary; none by default
      */
     public function __construct(
         ServerConfig $config,
@@ -49,6 +51,7 @@ final class InMemoryServer
         Decision $denial = Decision::Forbid,
         ?IdGenerator $ids = null,
         ?InMemoryState $state = null,
+        ?UnitOfWork $unitOfWork = null,
     ) {
         $this->state = $state ?? new InMemoryState($clock, $denial);
         $this->objects = $this->state->objects;
@@ -74,6 +77,7 @@ final class InMemoryServer
             $streams,
             $logger,
             ids: $ids,
+            unitOfWork: $unitOfWork,
         );
         $this->handler = ServerBuilder::build($this->services);
     }

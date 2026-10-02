@@ -10,6 +10,7 @@ use LambdaTwelve\OneRecord\Server\Http\HttpException;
 use LambdaTwelve\OneRecord\Server\Http\Negotiated;
 use LambdaTwelve\OneRecord\Server\Http\Responder;
 use LambdaTwelve\OneRecord\Server\Spi\Authenticator;
+use LambdaTwelve\OneRecord\Server\Spi\UnitOfWork;
 use LambdaTwelve\OneRecord\Spec\ApiVersion;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -35,6 +36,7 @@ final class OneRecordServer implements RequestHandlerInterface
         private readonly Authenticator $authenticator,
         private readonly Responder $responder,
         private readonly LoggerInterface $logger = new NullLogger(),
+        private readonly UnitOfWork $unitOfWork = new IdentityUnitOfWork(),
     ) {}
 
     public function handle(ServerRequestInterface $request): ResponseInterface
@@ -66,7 +68,13 @@ final class OneRecordServer implements RequestHandlerInterface
                 throw HttpException::unauthenticated();
             }
 
-            return $match['endpoint']->handle($request, $agent, $negotiated, $match['parameters']);
+            $endpoint = $match['endpoint'];
+            if (\in_array(strtoupper($request->getMethod()), ['GET', 'HEAD', 'OPTIONS'], true)) {
+                return $endpoint->handle($request, $agent, $negotiated, $match['parameters']);
+            }
+
+            // Everything a mutating request writes stands or falls together; a host binds its transaction here.
+            return $this->unitOfWork->run(static fn(): ResponseInterface => $endpoint->handle($request, $agent, $negotiated, $match['parameters']));
         } catch (HttpException $e) {
             return $this->responder->error($e->status, $e->errors, $negotiated, $e->headers, $head);
         } catch (InvalidDocument $e) {

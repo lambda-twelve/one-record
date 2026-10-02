@@ -54,7 +54,7 @@ final class LayerRule implements Rule
         'Server\\Spi' => self::DOCUMENTS,
         'Server\\Event' => [...self::DOCUMENTS, 'Server\\Spi'],
         // Reference implementations of the SPI plus the wiring to build a whole server; never endpoint code.
-        'Server\\InMemory' => [...self::DOCUMENTS, 'Server\\Spi', 'Server\\Event', 'Server\\ServerConfig', 'Server\\Services', 'Server\\ServerBuilder', 'Server\\OneRecordServer', 'Server\\IdGenerator', 'Server\\SystemClock'],
+        'Server\\InMemory' => [...self::DOCUMENTS, 'Server\\Spi', 'Server\\Event', 'Server\\ServerConfig', 'Server\\Services', 'Server\\ServerBuilder', 'Server\\OneRecordServer', 'Server\\SystemClock'],
         // The server proper: routing, HTTP, endpoints, lifecycle, fan-out. It may use everything below it.
         'Server' => [...self::DOCUMENTS, 'Server\\Spi', 'Server\\Event'],
         // The client talks to other servers; it must never reach into ours.

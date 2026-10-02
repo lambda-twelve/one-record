@@ -47,6 +47,6 @@ final class ServerBuilder
             $router->add(['POST'], '/logistics-events', new BulkLogisticsEventsEndpoint($services), ApiVersion::V2_3_0);
         }
 
-        return new OneRecordServer($services->config, $router, $services->authenticator, $services->responder, $services->logger);
+        return new OneRecordServer($services->config, $router, $services->authenticator, $services->responder, $services->logger, $services->unitOfWork);
     }
 }

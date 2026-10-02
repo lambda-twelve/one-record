@@ -37,14 +37,16 @@ final class ActionRequests
 
     public function create(Change|Subscription|AccessDelegation|Verification $payload, Iri $requestedBy): ActionRequest
     {
-        $request = ActionRequest::create($this->services->config->actionRequestIri($this->services->ids->next()), $payload, $requestedBy, $this->services->clock->now());
-        $this->services->actionRequests->save($request);
-        $this->services->dispatcher->dispatch(new ActionRequestCreated($request));
-        if ($request->notifyRequestStatusChange()) {
-            (new Fanout($this->services))->actionRequestStatusChanged($request);
-        }
+        return $this->services->unitOfWork->run(function () use ($payload, $requestedBy): ActionRequest {
+            $request = ActionRequest::create($this->services->config->actionRequestIri($this->services->ids->next()), $payload, $requestedBy, $this->services->clock->now());
+            $this->services->actionRequests->save($request);
+            $this->services->dispatcher->dispatch(new ActionRequestCreated($request));
+            if ($request->notifyRequestStatusChange()) {
+                (new Fanout($this->services))->actionRequestStatusChanged($request);
+            }
 
-        return $request;
+            return $request;
+        });
     }
 
     public function get(Iri $iri): ?ActionRequest
@@ -60,25 +62,27 @@ final class ActionRequests
      */
     public function accept(ActionRequest $request, Iri $by): ActionRequest
     {
-        $this->assertTransition($request, RequestStatus::Accepted);
-        $now = $this->services->clock->now();
-        $accepted = $request->withStatus(RequestStatus::Accepted, $now, $by);
+        return $this->services->unitOfWork->run(function () use ($request, $by): ActionRequest {
+            $this->assertTransition($request, RequestStatus::Accepted);
+            $now = $this->services->clock->now();
+            $accepted = $request->withStatus(RequestStatus::Accepted, $now, $by);
 
-        if ($request->payload instanceof Change) {
-            return $this->applyChange($accepted, $request->payload, $by);
-        }
-        if ($request->payload instanceof AccessDelegation) {
-            foreach ($request->payload->delegates as $delegate) {
-                foreach ($request->payload->logisticsObjects as $object) {
-                    $this->services->delegations->grant(new Grant($delegate, $object, $request->payload->permissions, $request->payload->expiresAt, $request->iri));
-                    $stored = $this->services->objects->latest($object);
-                    $this->services->outbox->enqueue(new OutboundNotification($delegate, new Notification(NotificationEventType::LogisticsObjectAccessGranted, $object, $stored?->object->mostSpecificType($this->services->vocabulary), $request->iri), $now));
+            if ($request->payload instanceof Change) {
+                return $this->applyChange($accepted, $request->payload, $by);
+            }
+            if ($request->payload instanceof AccessDelegation) {
+                foreach ($request->payload->delegates as $delegate) {
+                    foreach ($request->payload->logisticsObjects as $object) {
+                        $this->services->delegations->grant(new Grant($delegate, $object, $request->payload->permissions, $request->payload->expiresAt, $request->iri));
+                        $stored = $this->services->objects->latest($object);
+                        $this->services->outbox->enqueue(new OutboundNotification($delegate, new Notification(NotificationEventType::LogisticsObjectAccessGranted, $object, $stored?->object->mostSpecificType($this->services->vocabulary), $request->iri), $now, $this->services->ids->next()));
+                    }
                 }
             }
-        }
-        $this->store($accepted, $request->status);
+            $this->store($accepted, $request->status);
 
-        return $accepted;
+            return $accepted;
+        });
     }
 
     /**
@@ -86,32 +90,38 @@ final class ActionRequests
      */
     public function reject(ActionRequest $request, Iri $by, array $errors = []): ActionRequest
     {
-        $this->assertTransition($request, RequestStatus::Rejected);
-        $rejected = $request->withStatus(RequestStatus::Rejected, $this->services->clock->now(), $by, $errors);
-        $this->store($rejected, $request->status);
+        return $this->services->unitOfWork->run(function () use ($request, $by, $errors): ActionRequest {
+            $this->assertTransition($request, RequestStatus::Rejected);
+            $rejected = $request->withStatus(RequestStatus::Rejected, $this->services->clock->now(), $by, $errors);
+            $this->store($rejected, $request->status);
 
-        return $rejected;
+            return $rejected;
+        });
     }
 
     public function acknowledge(ActionRequest $request, Iri $by): ActionRequest
     {
-        $this->assertTransition($request, RequestStatus::Acknowledged);
-        $acknowledged = $request->withStatus(RequestStatus::Acknowledged, $this->services->clock->now(), $by);
-        $this->store($acknowledged, $request->status);
+        return $this->services->unitOfWork->run(function () use ($request, $by): ActionRequest {
+            $this->assertTransition($request, RequestStatus::Acknowledged);
+            $acknowledged = $request->withStatus(RequestStatus::Acknowledged, $this->services->clock->now(), $by);
+            $this->store($acknowledged, $request->status);
 
-        return $acknowledged;
+            return $acknowledged;
+        });
     }
 
     public function revoke(ActionRequest $request, Iri $by): ActionRequest
     {
-        $this->assertTransition($request, RequestStatus::Revoked);
-        $revoked = $request->withStatus(RequestStatus::Revoked, $this->services->clock->now(), $by);
-        if ($request->type === ActionRequestType::AccessDelegation && $request->status === RequestStatus::Accepted) {
-            $this->services->delegations->revokeFrom($request->iri);
-        }
-        $this->store($revoked, $request->status);
+        return $this->services->unitOfWork->run(function () use ($request, $by): ActionRequest {
+            $this->assertTransition($request, RequestStatus::Revoked);
+            $revoked = $request->withStatus(RequestStatus::Revoked, $this->services->clock->now(), $by);
+            if ($request->type === ActionRequestType::AccessDelegation && $request->status === RequestStatus::Accepted) {
+                $this->services->delegations->revokeFrom($request->iri);
+            }
+            $this->store($revoked, $request->status);
 
-        return $revoked;
+            return $revoked;
+        });
     }
 
     /**
@@ -119,11 +129,13 @@ final class ActionRequests
      */
     public function fail(ActionRequest $request, array $errors): ActionRequest
     {
-        $this->assertTransition($request, RequestStatus::Failed);
-        $failed = $request->withStatus(RequestStatus::Failed, $this->services->clock->now(), null, $errors);
-        $this->store($failed, $request->status);
+        return $this->services->unitOfWork->run(function () use ($request, $errors): ActionRequest {
+            $this->assertTransition($request, RequestStatus::Failed);
+            $failed = $request->withStatus(RequestStatus::Failed, $this->services->clock->now(), null, $errors);
+            $this->store($failed, $request->status);
 
-        return $failed;
+            return $failed;
+        });
     }
 
     private function applyChange(ActionRequest $accepted, Change $change, Iri $by): ActionRequest

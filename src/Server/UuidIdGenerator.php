@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace LambdaTwelve\OneRecord\Server;
 
 use LambdaTwelve\OneRecord\Model\Uuid;
+use LambdaTwelve\OneRecord\Server\Spi\IdGenerator;
 
 /**
- * Ids for the resources the server creates itself (action requests, events,
- * objects posted by partners): random UUIDs from an injectable byte source so
- * tests can be deterministic.
+ * Random UUIDs (version 4) from an injectable byte source, so tests can be
+ * deterministic.
  */
-final class IdGenerator
+final class UuidIdGenerator implements IdGenerator
 {
     /** @var callable(int): string */
     private $randomBytes;

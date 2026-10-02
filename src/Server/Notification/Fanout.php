@@ -58,7 +58,7 @@ final class Fanout
             $type = $stored?->object->mostSpecificType($this->services->vocabulary);
         }
         $notification = new Notification($request->type->notificationFor($request->status), $object, $type, $request->iri);
-        $this->services->outbox->enqueue(new OutboundNotification($request->requestedBy, $notification, $this->services->clock->now()));
+        $this->services->outbox->enqueue(new OutboundNotification($request->requestedBy, $notification, $this->services->clock->now(), $this->services->ids->next()));
     }
 
     /**
@@ -83,7 +83,7 @@ final class Fanout
                 [],
                 $subscription->sendLogisticsObjectBody ? $object : null,
             );
-            $this->services->outbox->enqueue(new OutboundNotification($subscription->subscriber, $decorate($base), $now));
+            $this->services->outbox->enqueue(new OutboundNotification($subscription->subscriber, $decorate($base), $now, $this->services->ids->next()));
         }
     }
 }

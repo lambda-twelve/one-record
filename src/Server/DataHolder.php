@@ -45,11 +45,13 @@ final class DataHolder
      */
     public function create(LogisticsObject $object): StoredObject
     {
-        $stored = $this->services->objects->create($object->withEmbeddedIds($this->services->embeddedIds), $this->services->clock->now());
-        $this->services->dispatcher->dispatch(new LogisticsObjectCreated($stored, $this->services->config->dataHolder));
-        (new Fanout($this->services))->logisticsObjectCreated($stored);
+        return $this->services->unitOfWork->run(function () use ($object): StoredObject {
+            $stored = $this->services->objects->create($object->withEmbeddedIds($this->services->embeddedIds), $this->services->clock->now());
+            $this->services->dispatcher->dispatch(new LogisticsObjectCreated($stored, $this->services->config->dataHolder));
+            (new Fanout($this->services))->logisticsObjectCreated($stored);
 
-        return $stored;
+            return $stored;
+        });
     }
 
     /**
@@ -59,14 +61,16 @@ final class DataHolder
      */
     public function update(LogisticsObject $object, ?string $description = null): ?ActionRequest
     {
-        $current = $this->services->objects->latest($object->iri)
-            ?? throw new InvalidArgumentException(\sprintf('"%s" does not exist; create it first.', $object->iri->value));
-        $change = (new ChangeBuilder($this->services->vocabulary))->diff($current->object, $object, $current->revision, $description);
-        if ($change === null) {
-            return null;
-        }
+        return $this->services->unitOfWork->run(function () use ($object, $description): ?ActionRequest {
+            $current = $this->services->objects->latest($object->iri)
+                ?? throw new InvalidArgumentException(\sprintf('"%s" does not exist; create it first.', $object->iri->value));
+            $change = (new ChangeBuilder($this->services->vocabulary))->diff($current->object, $object, $current->revision, $description);
+            if ($change === null) {
+                return null;
+            }
 
-        return $this->change($change);
+            return $this->change($change);
+        });
     }
 
     /**
@@ -74,9 +78,11 @@ final class DataHolder
      */
     public function change(Change $change): ActionRequest
     {
-        $request = $this->requests->create($change, $this->services->config->dataHolder);
+        return $this->services->unitOfWork->run(function () use ($change): ActionRequest {
+            $request = $this->requests->create($change, $this->services->config->dataHolder);
 
-        return $this->requests->accept($request, $this->services->config->dataHolder);
+            return $this->requests->accept($request, $this->services->config->dataHolder);
+        });
     }
 
     /**
@@ -88,25 +94,29 @@ final class DataHolder
      */
     public function publish(LocalGraph|ResolvedGraph $graph, ?IriMinter $minter = null, array $existing = []): PublishResult
     {
-        if ($graph instanceof LocalGraph) {
-            $graph = $graph->resolve($minter ?? throw new InvalidArgumentException('A LocalGraph needs an IriMinter to publish.'), $existing);
-        }
-        $outcomes = [];
-        foreach ($graph->objects as $key => $object) {
-            if (!$this->services->objects->exists($object->iri)) {
-                $this->create($object);
-                $outcomes[$key] = PublishResult::CREATED;
-                continue;
+        return $this->services->unitOfWork->run(function () use ($graph, $minter, $existing): PublishResult {
+            if ($graph instanceof LocalGraph) {
+                $graph = $graph->resolve($minter ?? throw new InvalidArgumentException('A LocalGraph needs an IriMinter to publish.'), $existing);
             }
-            $outcomes[$key] = $this->update($object, 'Republished by the data holder') === null ? PublishResult::UNCHANGED : PublishResult::UPDATED;
-        }
+            $outcomes = [];
+            foreach ($graph->objects as $key => $object) {
+                if (!$this->services->objects->exists($object->iri)) {
+                    $this->create($object);
+                    $outcomes[$key] = PublishResult::CREATED;
+                    continue;
+                }
+                $outcomes[$key] = $this->update($object, 'Republished by the data holder') === null ? PublishResult::UNCHANGED : PublishResult::UPDATED;
+            }
 
-        return new PublishResult($graph, $outcomes);
+            return new PublishResult($graph, $outcomes);
+        });
     }
 
     public function accept(Iri $request): ActionRequest
     {
-        return $this->requests->accept($this->require($request), $this->services->config->dataHolder);
+        return $this->services->unitOfWork->run(function () use ($request): ActionRequest {
+            return $this->requests->accept($this->require($request), $this->services->config->dataHolder);
+        });
     }
 
     /**
@@ -114,17 +124,23 @@ final class DataHolder
      */
     public function reject(Iri $request, array $errors = []): ActionRequest
     {
-        return $this->requests->reject($this->require($request), $this->services->config->dataHolder, $errors);
+        return $this->services->unitOfWork->run(function () use ($request, $errors): ActionRequest {
+            return $this->requests->reject($this->require($request), $this->services->config->dataHolder, $errors);
+        });
     }
 
     public function acknowledge(Iri $request): ActionRequest
     {
-        return $this->requests->acknowledge($this->require($request), $this->services->config->dataHolder);
+        return $this->services->unitOfWork->run(function () use ($request): ActionRequest {
+            return $this->requests->acknowledge($this->require($request), $this->services->config->dataHolder);
+        });
     }
 
     public function revoke(Iri $request): ActionRequest
     {
-        return $this->requests->revoke($this->require($request), $this->services->config->dataHolder);
+        return $this->services->unitOfWork->run(function () use ($request): ActionRequest {
+            return $this->requests->revoke($this->require($request), $this->services->config->dataHolder);
+        });
     }
 
     /**
@@ -135,9 +151,11 @@ final class DataHolder
      */
     public function subscribe(Subscription $subscription): ActionRequest
     {
-        $request = $this->requests->create($subscription, $subscription->subscriber);
+        return $this->services->unitOfWork->run(function () use ($subscription): ActionRequest {
+            $request = $this->requests->create($subscription, $subscription->subscriber);
 
-        return $this->requests->accept($request, $this->services->config->dataHolder);
+            return $this->requests->accept($request, $this->services->config->dataHolder);
+        });
     }
 
     /**
@@ -146,9 +164,11 @@ final class DataHolder
      */
     public function announce(Iri $object, Iri $recipient): void
     {
-        $stored = $this->services->objects->latest($object) ?? throw new InvalidArgumentException(\sprintf('"%s" does not exist.', $object->value));
-        $notification = new Notification(NotificationEventType::LogisticsObjectAvailable, $object, $stored->object->mostSpecificType($this->services->vocabulary));
-        $this->services->outbox->enqueue(new OutboundNotification($recipient, $notification, $this->services->clock->now()));
+        $this->services->unitOfWork->run(function () use ($object, $recipient): void {
+            $stored = $this->services->objects->latest($object) ?? throw new InvalidArgumentException(\sprintf('"%s" does not exist.', $object->value));
+            $notification = new Notification(NotificationEventType::LogisticsObjectAvailable, $object, $stored->object->mostSpecificType($this->services->vocabulary));
+            $this->services->outbox->enqueue(new OutboundNotification($recipient, $notification, $this->services->clock->now(), $this->services->ids->next()));
+        });
     }
 
     /**
@@ -158,7 +178,9 @@ final class DataHolder
      */
     public function forget(Iri $object): void
     {
-        $this->services->objects->erase($object);
+        $this->services->unitOfWork->run(function () use ($object): void {
+            $this->services->objects->erase($object);
+        });
     }
 
     public function actionRequests(): ActionRequests

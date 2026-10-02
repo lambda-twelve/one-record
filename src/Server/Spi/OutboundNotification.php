@@ -16,10 +16,15 @@ use LambdaTwelve\OneRecord\Rdf\Iri;
  */
 final readonly class OutboundNotification
 {
+    /**
+     * @param string $id unique per notification; a host retrying across restarts dedupes on it, and
+     *                   may pass it to the partner (an Idempotency-Key header, say)
+     */
     public function __construct(
         public Iri $recipient,
         public Notification $notification,
         public DateTimeImmutable $createdAt,
+        public string $id,
     ) {}
 
     /**

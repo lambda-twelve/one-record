@@ -12,10 +12,12 @@ use LambdaTwelve\OneRecord\Server\Spi\AccessDelegationStore;
 use LambdaTwelve\OneRecord\Server\Spi\AccessPolicy;
 use LambdaTwelve\OneRecord\Server\Spi\ActionRequestStore;
 use LambdaTwelve\OneRecord\Server\Spi\Authenticator;
+use LambdaTwelve\OneRecord\Server\Spi\IdGenerator;
 use LambdaTwelve\OneRecord\Server\Spi\LogisticsEventStore;
 use LambdaTwelve\OneRecord\Server\Spi\LogisticsObjectStore;
 use LambdaTwelve\OneRecord\Server\Spi\NotificationOutbox;
 use LambdaTwelve\OneRecord\Server\Spi\SubscriptionStore;
+use LambdaTwelve\OneRecord\Server\Spi\UnitOfWork;
 use LambdaTwelve\OneRecord\Vocabulary\Vocabulary;
 use Psr\Clock\ClockInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
@@ -37,6 +39,7 @@ final readonly class Services
     public EmbeddedIdMinter $embeddedIds;
     public LoggerInterface $logger;
     public IdGenerator $ids;
+    public UnitOfWork $unitOfWork;
 
     public function __construct(
         public ServerConfig $config,
@@ -56,12 +59,14 @@ final readonly class Services
         ?Vocabulary $vocabulary = null,
         ?EmbeddedIdMinter $embeddedIds = null,
         ?IdGenerator $ids = null,
+        ?UnitOfWork $unitOfWork = null,
     ) {
         $this->responder = new Responder($responses, $streams);
         $this->body = new RequestBody($config->maxBodyBytes);
         $this->vocabulary = $vocabulary ?? Vocabulary::default();
         $this->embeddedIds = $embeddedIds ?? new Uuid5EmbeddedIdMinter();
         $this->logger = $logger ?? new NullLogger();
-        $this->ids = $ids ?? new IdGenerator();
+        $this->ids = $ids ?? new UuidIdGenerator();
+        $this->unitOfWork = $unitOfWork ?? new IdentityUnitOfWork();
     }
 }

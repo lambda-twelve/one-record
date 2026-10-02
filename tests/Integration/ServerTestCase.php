@@ -9,10 +9,10 @@ use LambdaTwelve\OneRecord\Model\Builder\ObjectBuilder;
 use LambdaTwelve\OneRecord\Model\Builder\Values;
 use LambdaTwelve\OneRecord\Model\LogisticsObject;
 use LambdaTwelve\OneRecord\Rdf\Iri;
-use LambdaTwelve\OneRecord\Server\IdGenerator;
 use LambdaTwelve\OneRecord\Server\InMemory\InMemoryServer;
 use LambdaTwelve\OneRecord\Server\ServerConfig;
 use LambdaTwelve\OneRecord\Server\Spi\Decision;
+use LambdaTwelve\OneRecord\Server\UuidIdGenerator;
 use LambdaTwelve\OneRecord\Tests\Support\FixedClock;
 use LambdaTwelve\OneRecord\Tests\Support\HeaderAuthenticator;
 use LambdaTwelve\OneRecord\Tests\Support\RecordingDispatcher;
@@ -44,7 +44,7 @@ abstract class ServerTestCase extends TestCase
         $this->server = $this->makeServer();
     }
 
-    protected function makeServer(Decision $denial = Decision::Forbid, string $basePath = '', bool $bulkEvents = false): InMemoryServer
+    protected function makeServer(Decision $denial = Decision::Forbid, string $basePath = '', bool $bulkEvents = false, ?\LambdaTwelve\OneRecord\Server\Spi\UnitOfWork $unitOfWork = null): InMemoryServer
     {
         $factory = new Psr17Factory();
         $counter = 0;
@@ -56,9 +56,10 @@ abstract class ServerTestCase extends TestCase
             $factory,
             $factory,
             denial: $denial,
-            ids: new IdGenerator(static function (int $n) use (&$counter): string {
+            ids: new UuidIdGenerator(static function (int $n) use (&$counter): string {
                 return str_pad((string) ++$counter, $n, "\0", STR_PAD_LEFT);
             }),
+            unitOfWork: $unitOfWork,
         );
         $server->policy->addInternal(new Iri(self::HOLDER));
 
