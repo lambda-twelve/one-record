@@ -46,3 +46,10 @@ All notable changes to this package are recorded here. The format follows
   (apply a change atomically with the spec's rules: revision check, no event
   edits, deletes before adds, ontology validation, orphan cleanup).
 - `Api\Error`, `Api\ErrorDetail`, `Api\Severity` value objects.
+- `Auth`: `Rs256Verifier` (RS256 only, keys from a resolver, issuer/expiry/
+  not-before/audience checks), `Rs256Signer`, `StaticKeyResolver`,
+  `JwksKeyResolver` (PSR-18 + PSR-16, refresh on unknown key id), `Jwk` (RSA
+  JWK to PEM), `JwtAuthenticator` for the server's `Authenticator` SPI, and
+  `TokenEndpoint`, a PSR-15 OAuth 2.0 client-credentials endpoint with a
+  `ClientCredentialsVerifier` SPI and an in-memory reference implementation.
+- `Server\Spi\Authenticator` and `Server\Spi\Agent`.
