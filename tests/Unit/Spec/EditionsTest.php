@@ -43,7 +43,8 @@ final class EditionsTest extends TestCase
     public function testEditionsArePinnedToFullCommits(): void
     {
         foreach (Edition::cases() as $edition) {
-            self::assertMatchesRegularExpression('/^[0-9a-f]{40}$/', $edition->commit());
+            self::assertMatchesRegularExpression('/^[0-9a-f]{40}$/', $edition->ontologyCommit());
+            self::assertMatchesRegularExpression('/^[0-9a-f]{40}$/', $edition->documentationCommit());
             self::assertSame($edition->value . '-standard', $edition->ontologyFolder());
         }
     }

@@ -20,10 +20,24 @@ enum Edition: string
     case E2026_07 = '2026-07';
 
     /**
-     * The commit each tag points at, so generated files and fixtures are
-     * reproducible even if a tag were ever moved.
+     * The commit the ontology files are read from. IATA cut both release tags
+     * while the ontologies still said "release candidate" and corrected the
+     * `<edition>-standard` folders on master afterwards (versionInfo "3.2"
+     * instead of "3.2-rc2", fixed labels and cardinalities), so the endorsed
+     * ontologies are pinned to that later master commit, not to the tag.
      */
-    public function commit(): string
+    public function ontologyCommit(): string
+    {
+        return match ($this) {
+            self::E2025_07, self::E2026_07 => 'ad5f40d539b29692881672cf91878a4d2dbe59c2',
+        };
+    }
+
+    /**
+     * The commit the specification text and example bodies are read from:
+     * the release tag, whose documentation site is the endorsed edition.
+     */
+    public function documentationCommit(): string
     {
         return match ($this) {
             self::E2025_07 => 'dfe7c38fbd104c4a85adfe1f6703c1ad87561928',
