@@ -29,7 +29,7 @@ use LambdaTwelve\OneRecord\Rdf\Triple;
 final class Expander
 {
     private const array REJECTED_KEYWORDS = [
-        '@graph' => 'Named graphs (@graph)',
+        '@graph' => 'A @graph inside a node (named graphs)',
         '@list' => 'Ordered lists (@list)',
         '@set' => '@set',
         '@reverse' => 'Reverse properties (@reverse)',
@@ -48,17 +48,69 @@ final class Expander
 
     /**
      * @param array<string, mixed> $document a decoded JSON object
+     * @param ?Iri $preferredRoot the node to treat as the document's subject when the document is a flat @graph
      */
-    public function expand(array $document): ExpandedDocument
+    public function expand(array $document, ?Iri $preferredRoot = null): ExpandedDocument
     {
         $this->counter = 0;
         $this->documentBlankNodes = [];
         $graph = new Graph();
         $context = Context::fromRaw($document['@context'] ?? null);
         unset($document['@context']);
+        if (\array_key_exists('@graph', $document)) {
+            return new ExpandedDocument($graph, $this->flatGraph($document, $context, $graph, $preferredRoot), $context);
+        }
         $root = $this->node($document, '', $context, $graph);
 
         return new ExpandedDocument($graph, $root, $context);
+    }
+
+    /**
+     * A top-level @graph is the flattened form of one document: a list of
+     * nodes referencing each other by @id (NE:ONE answers this way for any
+     * object with embedded nodes). Every node joins the same graph; the root
+     * is the preferred node if present, else the top-level @id, else the one
+     * node nothing else references, else the first.
+     *
+     * @param array<string, mixed> $document
+     */
+    private function flatGraph(array $document, Context $context, Graph $graph, ?Iri $preferredRoot): Iri|BlankNode
+    {
+        foreach (array_keys($document) as $key) {
+            if (!\in_array($key, ['@graph', '@id'], true)) {
+                throw JsonLdException::unsupported((string) $key, 'A property next to a top-level @graph');
+            }
+        }
+        $nodes = $document['@graph'];
+        if (!\is_array($nodes) || !array_is_list($nodes) || $nodes === []) {
+            throw JsonLdException::at('@graph', '@graph must be a non-empty array of node objects');
+        }
+        $subjects = [];
+        foreach ($nodes as $index => $node) {
+            if (!\is_array($node) || array_is_list($node)) {
+                throw JsonLdException::at('@graph[' . $index . ']', 'Every @graph entry must be a node object');
+            }
+            /** @var array<string, mixed> $node */
+            $subjects[] = $this->node($node, '@graph[' . $index . ']', $context, $graph);
+        }
+        if ($preferredRoot !== null && $graph->about($preferredRoot) !== []) {
+            return $preferredRoot;
+        }
+        if (\is_string($document['@id'] ?? null) && $document['@id'] !== '') {
+            $named = $this->identifier($document['@id'], '@id', $context);
+            if ($graph->about($named) !== []) {
+                return $named;
+            }
+        }
+        $referenced = [];
+        foreach ($graph as $triple) {
+            if ($triple->object instanceof Iri || $triple->object instanceof BlankNode) {
+                $referenced[$triple->object->toNTriples()] = true;
+            }
+        }
+        $unreferenced = array_values(array_filter($subjects, static fn(Iri|BlankNode $s): bool => !isset($referenced[$s->toNTriples()])));
+
+        return \count($unreferenced) === 1 ? $unreferenced[0] : $subjects[0];
     }
 
     /**

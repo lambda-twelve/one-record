@@ -34,6 +34,8 @@ final class ChangeBuilder
 {
     private int $blankCounter = 0;
 
+    private ?Iri $root = null;
+
     public function __construct(
         private readonly ?Vocabulary $vocabulary = null,
         private readonly ?Comparer $comparer = null,
@@ -48,11 +50,16 @@ final class ChangeBuilder
         if (!$from->iri->equals($to->iri)) {
             throw new ModelException(\sprintf('Cannot diff "%s" against "%s": a change applies to one logistics object.', $from->iri->value, $to->iri->value));
         }
-        if ($from->types() !== $to->types()) {
+        // Servers may list inferred superclasses in @type (NE:ONE does; spec question 21), so only the
+        // most specific classes decide whether the type changed. Type triples are never diffed: the
+        // spec gives a Change no way to retype an object, and the applier refuses such operations.
+        $vocabulary = $this->vocabulary ?? Vocabulary::default();
+        if ($vocabulary->mostSpecific($from->types()) !== $vocabulary->mostSpecific($to->types())) {
             throw ChangeException::because('Invalid resource', 'The type of a logistics object cannot be changed with a Change.');
         }
 
         $this->blankCounter = 0;
+        $this->root = $from->iri;
         $operations = $this->diffNode($from->graph, $to->graph, $from->iri, $to->iri, $from->iri);
         if ($operations === []) {
             return null;
@@ -74,7 +81,7 @@ final class ChangeBuilder
         ksort($predicates, SORT_STRING);
 
         foreach ($predicates as $predicate) {
-            if ($predicate->value === Cargo::events) {
+            if ($predicate->value === Cargo::events || ($predicate->value === Graph::RDF_TYPE && $this->root !== null && $fromNode->equals($this->root))) {
                 continue;
             }
             [$oldPlain, $oldEmbedded] = $this->partition($fromGraph, $fromGraph->objects($fromNode, $predicate));

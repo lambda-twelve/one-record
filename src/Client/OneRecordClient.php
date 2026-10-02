@@ -179,7 +179,11 @@ final class OneRecordClient
             $query['embedded'] = 'true';
         }
         $response = $this->send('GET', $iri->value . ($query === [] ? '' : '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986)));
-        $object = $this->parse(static fn(): LogisticsObject => LogisticsObject::fromJsonLd(self::body($response)), 'logistics object');
+        $object = $this->parse(static function () use ($response, $iri): LogisticsObject {
+            $document = JsonLd::expand(self::body($response), $iri);
+            // A historical read is rooted at "<iri>?at=…"; otherwise the root is the object asked for.
+            return LogisticsObject::fromJsonLd(self::body($response), $document->root instanceof Iri && $document->root->equals($iri) ? $iri : null);
+        }, 'logistics object');
 
         return $this->objectResponse($response, self::withoutRevisionProperties($object));
     }

@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace LambdaTwelve\OneRecord\JsonLd;
 
+use DateTimeImmutable;
+use DateTimeZone;
+use Exception;
 use LambdaTwelve\OneRecord\Rdf\BlankNode;
 use LambdaTwelve\OneRecord\Rdf\Graph;
 use LambdaTwelve\OneRecord\Rdf\Iri;
@@ -143,8 +146,30 @@ final class Comparer
                 '0' => Literal::boolean(false),
                 default => $term,
             },
+            // The bounded integer types are the same number; servers pick one or the other (NE:ONE writes xsd:int).
+            Namespaces::XSD . 'int', Namespaces::XSD . 'long', Namespaces::XSD . 'short', Namespaces::XSD . 'nonNegativeInteger', Namespaces::XSD . 'positiveInteger' => preg_match('/^[+-]?\d+$/', $term->lexical) === 1
+                ? new Literal(self::canonicalInteger($term->lexical), Literal::XSD_INTEGER)
+                : $term,
+            Literal::XSD_DATETIME => self::canonicalDateTime($term),
             default => $term,
         };
+    }
+
+    /**
+     * One instant, one lexical form: UTC, no trailing zero fraction
+     * ("2026-10-02T11:00:00.000Z" and "2026-10-02T11:00:00Z" are the same value).
+     */
+    private static function canonicalDateTime(Literal $term): Literal
+    {
+        try {
+            $value = new DateTimeImmutable($term->lexical);
+        } catch (Exception) {
+            return $term;
+        }
+        $utc = $value->setTimezone(new DateTimeZone('UTC'));
+        $fraction = rtrim($utc->format('u'), '0');
+
+        return new Literal($utc->format('Y-m-d\TH:i:s') . ($fraction === '' ? '' : '.' . $fraction) . 'Z', Literal::XSD_DATETIME);
     }
 
     private static function canonicalInteger(string $lexical): string

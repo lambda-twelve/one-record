@@ -19,11 +19,11 @@ final class JsonLd
     /**
      * @param string|array<string, mixed> $document JSON text or a decoded object
      */
-    public static function expand(string|array $document): ExpandedDocument
+    public static function expand(string|array $document, ?Iri $preferredRoot = null): ExpandedDocument
     {
         $decoded = \is_string($document) ? Json::decodeObject($document) : $document;
 
-        return (new Expander())->expand($decoded);
+        return (new Expander())->expand($decoded, $preferredRoot);
     }
 
     /**

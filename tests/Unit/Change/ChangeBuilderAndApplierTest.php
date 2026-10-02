@@ -320,4 +320,20 @@ final class ChangeBuilderAndApplierTest extends TestCase
             self::assertSame('ONE Record Advertisement Materials', $from->literal(Cargo::goodsDescription));
         }
     }
+
+    public function testInferredSuperclassesAreNeitherATypeChangeNorDiffed(): void
+    {
+        $iri = new Iri('https://1r.example.com/logistics-objects/p1');
+        // What NE:ONE answers: the declared class plus every superclass.
+        $served = ObjectBuilder::ofTypes([Cargo::Piece, Cargo::PhysicalLogisticsObject, Cargo::LogisticsObject])->set(Cargo::goodsDescription, 'Books')->build($iri);
+        $wanted = ObjectBuilder::of(Cargo::Piece)->set(Cargo::goodsDescription, 'Magazines')->build($iri);
+
+        $change = (new ChangeBuilder())->diff($served, $wanted, 1);
+
+        self::assertNotNull($change);
+        self::assertSame([Cargo::goodsDescription], $change->changedProperties(), 'no operation touches rdf:type');
+
+        $this->expectException(ChangeException::class);
+        (new ChangeBuilder())->diff($served, ObjectBuilder::of(Cargo::Shipment)->set(Cargo::goodsDescription, 'Books')->build($iri), 1);
+    }
 }

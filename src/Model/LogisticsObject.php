@@ -41,7 +41,7 @@ final readonly class LogisticsObject
      */
     public static function fromJsonLd(string|array $json, ?Iri $expectedIri = null): self
     {
-        $document = JsonLd::expand($json);
+        $document = JsonLd::expand($json, $expectedIri);
         $root = $document->root;
         if ($root instanceof BlankNode) {
             if ($expectedIri === null) {

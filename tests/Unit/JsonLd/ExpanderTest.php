@@ -183,7 +183,7 @@ final class ExpanderTest extends TestCase
         yield 'remote context' => [['@context' => 'https://onerecord.iata.org/context.jsonld'], 'remote context'];
         yield 'array context' => [['@context' => [$ctx, $ctx]], 'not a single JSON object'];
         yield 'nested context' => [['@context' => $ctx, 'cargo:x' => ['@context' => $ctx, 'cargo:y' => 1]], '@context inside an embedded object'];
-        yield '@graph' => [['@context' => $ctx, '@graph' => []], 'Named graphs'];
+        yield '@graph' => [['@context' => $ctx, '@graph' => []], 'non-empty array'];
         yield '@list' => [['@context' => $ctx, 'cargo:x' => ['@list' => [1, 2]]], 'Ordered lists'];
         yield '@set' => [['@context' => $ctx, 'cargo:x' => ['@set' => [1]]], '@set'];
         yield '@reverse' => [['@context' => $ctx, '@reverse' => []], 'Reverse properties'];
@@ -249,5 +249,38 @@ final class ExpanderTest extends TestCase
         self::assertSame([], Context::fromRaw(null)->toRaw());
         self::assertSame('urn:uuid:1', $context->expandIri('urn:uuid:1', 'x', vocabRelative: false), 'well-known schemes are not mistaken for undefined prefixes');
         self::assertSame('internal:abc', $context->expandIri('internal:abc', 'x', vocabRelative: false));
+    }
+
+    public function testATopLevelGraphIsOneFlattenedDocument(): void
+    {
+        // The shape NE:ONE answers with: the object and its embedded nodes side by side, @vocab for cargo.
+        $json = [
+            '@context' => ['@vocab' => self::CARGO],
+            '@graph' => [
+                ['@id' => 'https://1r.example.com/logistics-objects/p1', '@type' => ['LogisticsObject', 'Piece'], 'grossWeight' => ['@id' => 'neone:w1']],
+                ['@id' => 'neone:w1', '@type' => 'Value', 'numericalValue' => ['@value' => '20.5', '@type' => 'http://www.w3.org/2001/XMLSchema#double']],
+                ['@id' => self::CARGO . 'ACTUAL', '@type' => 'EventTimeType'],
+            ],
+        ];
+        $doc = JsonLd::expand($json);
+        self::assertSame('https://1r.example.com/logistics-objects/p1', $doc->rootIri()?->value, 'the object nothing references is the root (ACTUAL is a loose node, but the piece comes first)');
+        self::assertCount(6, $doc->graph);
+        self::assertSame('20.5', $doc->graph->firstObject(new Iri('neone:w1'), self::CARGO . 'numericalValue')?->toNTriples() === null ? null : '20.5');
+
+        $preferred = JsonLd::expand($json, new Iri('neone:w1'));
+        self::assertSame('neone:w1', $preferred->rootIri()?->value, 'a preferred root wins when present');
+        $named = JsonLd::expand(['@context' => ['@vocab' => self::CARGO], '@id' => 'neone:w1', ...array_intersect_key($json, ['@graph' => 1])]);
+        self::assertSame('neone:w1', $named->rootIri()?->value, 'a top-level @id names the root');
+
+        $this->expectException(JsonLdException::class);
+        $this->expectExceptionMessage('@graph inside a node');
+        JsonLd::expand(['@context' => ['@vocab' => self::CARGO], '@id' => 'https://x.example/1', 'pieces' => ['@graph' => []]]);
+    }
+
+    public function testATopLevelGraphWithOtherPropertiesIsRefused(): void
+    {
+        $this->expectException(JsonLdException::class);
+        $this->expectExceptionMessage('next to a top-level @graph');
+        JsonLd::expand(['@context' => ['@vocab' => self::CARGO], '@graph' => [['@id' => 'https://x.example/1']], 'name' => 'no']);
     }
 }

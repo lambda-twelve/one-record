@@ -26,7 +26,7 @@ processor.
 | --- | --- |
 | A remote context (a URL string) or an array of contexts | Would require fetching and merging contexts; IATA's documents inline one object |
 | `@context` inside an embedded object | Scoped contexts change the meaning of keys below them |
-| `@graph`, `@included` | Named graphs: a logistics object is one graph |
+| `@graph` inside a node, `@included` | Named graphs: a logistics object is one graph. A *top-level* `@graph` (the flattened form NE:ONE answers with) is read as one document whose root is the node asked for, else the one node nothing references |
 | `@list` | Ordered lists have no place in the ONE Record data model |
 | `@set`, `@nest`, `@index`, `@reverse`, `@json`, `@direction`, `@container` | Not used by the standard; silently accepting them would misread data |
 | Nested arrays | List-of-lists semantics |
