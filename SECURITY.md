@@ -22,4 +22,6 @@ NE:ONE, and deployments of this package by third parties.
 
 ## Supported versions
 
-Until 1.0.0, only the latest 0.x minor release receives security fixes.
+Before 1.0.0, only the latest pre-release (1.0.0-betaN, then 1.0.0-rcN)
+receives security fixes. From 1.0.0 on, the latest minor release of the current
+major version is supported.

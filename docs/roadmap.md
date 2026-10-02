@@ -14,9 +14,19 @@ Status: :white_check_mark: done, :construction: in progress, :hourglass: planned
 | 6 | Compliance collection (newman) run for API 2.2.0 and 2.3.0 in CI | :hourglass: |
 | 7 | Client over PSR-18 with server-information discovery and version selection | :hourglass: |
 | 8 | Interoperability suite against NE:ONE as an RDF comparison oracle | :hourglass: |
-| 9 | Documentation complete, 0.1.0 | :hourglass: |
+| 9 | Documentation complete, first release 1.0.0-beta1 | :hourglass: |
 
-## After 0.1.0
+## Release numbering
+
+The first tag is **1.0.0-beta1**, not 0.1.0. By then the package serves and
+consumes both API editions, is exercised by the compliance collection for each
+of them and is compared against NE:ONE as an RDF oracle; "0.x" would understate
+that. The beta label says what is actually still open: real-world use by
+wrappers and partners may still force public API changes before 1.0.0, and
+those are allowed (and recorded) between betas. See
+[decisions](decisions.md#first-release-is-100-beta1).
+
+## After 1.0.0
 
 - Laravel wrapper (`lambda-twelve/one-record-laravel`) and a Drupal wrapper, in
   their own repositories.

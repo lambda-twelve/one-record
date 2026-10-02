@@ -55,3 +55,15 @@ The API has no delete for logistics objects and keeps an audit trail. Real
 deployments still have data-protection obligations, so the SDK makes
 "forget" explicit: access is closed at once and the store is asked to erase.
 The wrapper decides when.
+
+## First release is 1.0.0-beta1
+
+The first tagged release will be 1.0.0-beta1, not 0.1.0. When the roadmap is
+complete the package has feature parity with a working implementation (NE:ONE)
+on both API editions, a compliance collection run per edition and an interop
+suite that compares graphs as RDF; a 0.x number would signal "experimental"
+to someone evaluating it, which would be false. "Beta" is the honest label for
+what is actually left: use by the Laravel wrapper and by partners may still
+change the public API, and betas allow that. 1.0.0 follows once a wrapper has
+run against a partner without API changes.
+

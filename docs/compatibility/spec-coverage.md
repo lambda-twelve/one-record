@@ -51,4 +51,4 @@ Spec sources: [2025-07 edition](https://iata-cargo.github.io/ONE-Record/2025-07/
 | Action-request state machines (change/subscription/delegation and verification) | planned | |
 | Notification fan-out: by identifier or type, event-type filter, `notifyRequestStatusChange`, `sendLogisticsObjectBody` | planned | |
 | Request size limit, UTF-8 bodies, no 301 redirects | planned | |
-| `text/turtle` content type | not planned | JSON-LD is the mandatory serialisation; Turtle may follow after 0.1.0 |
+| `text/turtle` content type | not planned | JSON-LD is the mandatory serialisation; Turtle may follow after 1.0.0 |

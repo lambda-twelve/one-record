@@ -2,8 +2,13 @@
 
 All notable changes to this package are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
-[Semantic Versioning](https://semver.org/). Breaking changes are allowed before
-1.0.0 and are listed under the release that makes them.
+[Semantic Versioning](https://semver.org/).
+
+The first release is 1.0.0-beta1, cut when the roadmap is complete: both API
+editions served and consumed, the compliance collection and the NE:ONE
+interoperability suite green. Pre-release versions (`-betaN`, `-rcN`) may still
+change the public API; every such change is listed under the release that makes
+it. From 1.0.0 on, breaking changes need a new major version.
 
 ## [Unreleased]
 
