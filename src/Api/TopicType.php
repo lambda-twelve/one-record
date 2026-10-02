@@ -14,6 +14,14 @@ enum TopicType: string
     /** The topic is a class IRI (every object of that type). */
     case Type = Api::LOGISTICS_OBJECT_TYPE;
 
+    /**
+     * The spelling used in query strings: LOGISTICS_OBJECT_IDENTIFIER or LOGISTICS_OBJECT_TYPE.
+     */
+    public function shortName(): string
+    {
+        return substr($this->value, \strlen(Api::NAMESPACE));
+    }
+
     public static function tryFromString(string $value): ?self
     {
         $value = str_starts_with($value, 'api:') ? Api::NAMESPACE . substr($value, 4) : $value;

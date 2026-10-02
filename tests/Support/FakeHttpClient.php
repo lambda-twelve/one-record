@@ -32,6 +32,14 @@ final class FakeHttpClient implements ClientInterface
         return $this;
     }
 
+    /**
+     * The most recent request, for assertions after a single call.
+     */
+    public function lastRequest(): RequestInterface
+    {
+        return $this->requests[array_key_last($this->requests) ?? throw new LogicException('No request was sent.')];
+    }
+
     public function sendRequest(RequestInterface $request): ResponseInterface
     {
         $this->requests[] = $request;
