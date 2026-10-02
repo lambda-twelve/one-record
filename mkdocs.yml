@@ -1,0 +1,82 @@
+site_name: ONE Record for PHP
+site_description: A framework-agnostic PHP implementation of IATA ONE Record (server and client).
+site_url: https://lambda-twelve.github.io/one-record/
+repo_url: https://github.com/lambda-twelve/one-record
+repo_name: lambda-twelve/one-record
+edit_uri: edit/main/docs/
+copyright: Copyright &copy; 2026 Lambda Twelve. Apache-2.0. The ONE Record specification and ontologies are IATA's (MIT).
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - content.code.copy
+    - content.tabs.link
+    - search.suggest
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - footnotes
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: getting-started/installation.md
+      - Running a server: getting-started/server.md
+      - Using the client: getting-started/client.md
+  - Guide:
+      - Model and builders: guide/model-and-builders.md
+      - JSON-LD subset: guide/json-ld.md
+      - Changes and change requests: guide/changes.md
+      - Notifications and subscriptions: guide/notifications-and-subscriptions.md
+      - Action requests: guide/action-requests.md
+      - Authentication: guide/auth.md
+      - The SPI a host implements: guide/spi.md
+      - Forgetting data: guide/forgetting-data.md
+      - Adding a new spec edition: guide/adding-a-spec-edition.md
+  - Examples: examples/index.md
+  - Compatibility:
+      - Spec coverage: compatibility/spec-coverage.md
+      - API and data model versions: compatibility/versions.md
+      - Data model terms: compatibility/data-model.md
+      - NE:ONE interoperability: compatibility/neone.md
+  - Roadmap: roadmap.md
+  - Design:
+      - SDK boundary: sdk-boundary.md
+      - Decisions: decisions.md
+      - Open specification questions: spec-questions.md
+  - Changelog: changelog.md
+  - Contributing: contributing.md
+  - Security: security.md

@@ -1,0 +1,20 @@
+lambda-twelve/one-record
+Copyright 2026 Lambda Twelve
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not
+use this software except in compliance with the License. A copy of the License
+is in the LICENSE file and at http://www.apache.org/licenses/LICENSE-2.0.
+
+This product implements the IATA ONE Record standard. The ONE Record API
+specification, the ONE Record cargo ontology, the ONE Record API ontology and
+the ONE Record code lists are the work of the International Air Transport
+Association (IATA), published at https://github.com/IATA-Cargo/ONE-Record
+under the MIT License. The generated vocabulary in src/Vocabulary/Generated is
+derived from those ontologies; the generating script records the exact upstream
+commit in each generated file.
+
+NE:ONE (https://git.openlogisticsfoundation.org/wg-digitalaircargo/ne-one),
+licensed under the Open Logistics Foundation License 1.3, is used only as an
+external comparison oracle in the interoperability test suite. No NE:ONE source
+code is included in this product. The files under tests/Interop/neone that
+build it are Lambda Twelve's own.
