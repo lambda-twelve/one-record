@@ -84,6 +84,20 @@ it. From 1.0.0 on, breaking changes need a new major version.
   in CI against `bin/serve` for API 2.2.0 and 2.3.0 (`ddev compliance` locally).
 - `bin/serve`: the in-memory server under PHP's built-in web server with an
   OAuth 2.0 token endpoint, for development and the compliance collection.
+- Review round with the Laravel and Drupal wrapper teams:
+  `Server\Spi\UnitOfWork` (the host's transaction boundary around every
+  mutating request and holder operation); `Server\Spi\IdGenerator` as an
+  interface with `UuidIdGenerator`; an `id` on `OutboundNotification`;
+  `SubscriptionStore::offer()`/`withdraw()`, `ActionRequestStore::accepted()`,
+  `LogisticsEventStore::eraseFor()`, `AccessDelegationStore::eraseFor()` and a
+  scoped `DataHolder::forget()`; `Server\GrantAccessPolicy` (public grants
+  stored as grants to `EVERYONE`; `InMemoryAccessPolicy` deprecated);
+  millisecond `SystemClock`, `ActionRequest::toStorageJsonLd()`,
+  `LogisticsEvent::fromStored()` and `ObjectBuilder::ofEvent()`;
+  `Auth\Jwt\ChainKeyResolver`, an optional, fault-tolerant cache on
+  `JwksKeyResolver`, `Auth\JwksEndpoint`; `ServerBuilder::routes()`; objects
+  created over HTTP fan out to subscribers; and the `Testing` namespace with
+  the doubles and `Testing\Contract` store contract tests.
 - `Server\Spi\Authenticator` and `Server\Spi\Agent`.
 - Interoperability suite (`tests/Interop/`): NE:ONE built from source at a
   pinned commit as a comparison oracle; the same graph published to both

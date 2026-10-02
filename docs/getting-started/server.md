@@ -41,6 +41,13 @@ $config = new ServerConfig(
 
 Logistics-object URIs are then `https://1r.example.com/one-record/logistics-objects/{id}`.
 Requests outside the base path are answered 404; the server never redirects.
+A site served from a subdirectory puts the subdirectory in `basePath` too,
+because the SDK sees the full request path.
+
+Frameworks that want one named route per endpoint read
+`ServerBuilder::routes()`: every pattern with every method the SDK answers,
+so the framework passes them all through and the SDK, not the framework,
+answers 405 with the spec's error body and `Allow` header.
 
 Other `ServerConfig` options:
 

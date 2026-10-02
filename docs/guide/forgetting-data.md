@@ -13,23 +13,21 @@ trigger.
 $dataHolder->forget($objectIri);
 ```
 
-`DataHolder::forget()` calls `LogisticsObjectStore::erase()`, which removes
-every revision of the object. From then on the server answers 404 for the
-object, its audit trail and its events, exactly as for a URI that never
-existed. Action requests that referenced the object stay in their store (they
-are part of other parties' history); a change request against a forgotten
-object fails on acceptance with a 404 error.
+`DataHolder::forget($object, events: true, grants: true)` erases every
+revision (`LogisticsObjectStore::erase()`), the object's events
+(`LogisticsEventStore::eraseFor()`) and the grants on it
+(`AccessDelegationStore::eraseFor()`), in one unit of work. From then on the
+server answers 404 for the object, its audit trail and its events, exactly as
+for a URI that never existed. Pass `events: false` where status history must
+outlive the object. Action requests that referenced the object stay in their
+store (they are part of other parties' history); a change request against a
+forgotten object fails on acceptance with a 404 error.
 
 ## What the host must do
 
-- **Close access first.** Erasing the data does not change the access policy.
-  A host whose policy is table-driven should drop the grants, or the policy
-  will keep answering "allowed" for a URI that then yields 404; harmless, but
-  untidy.
-- **Decide about events.** `erase()` is the object store's method; the event
-  store is separate on purpose, because some hosts must keep status history
-  for legal reasons after the object is gone. Call
-  `LogisticsEventStore` cleanup yourself if events must go too.
+- **Close access in your own rules.** Grants in the store are erased; a policy
+  with rules of its own (ownership tables, say) must stop answering for the
+  URI itself.
 - **Tell partners if you must.** There is no notification type for deletion.
   A host that wants to inform subscribers does so out of band.
 - **Scheduling is yours.** Retention periods, legal holds and approval

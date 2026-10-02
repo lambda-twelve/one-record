@@ -25,8 +25,9 @@ fallback.
 ## Client: negotiated per partner
 
 - The client fetches the partner's server information, picks the highest API
-  version both sides support and sends it in `Accept`. If the partner lists
-  nothing usable, it sends no version parameter.
+  version both sides list and speaks it from then on. When the partner lists
+  nothing this client speaks, `apiVersion()` throws `ClientException`;
+  `withApiVersion()` forces a version for partners that misreport.
 - Every generated vocabulary term records the data model version it appeared
   in, so builders can be given a partner's version and refuse to publish a
   3.3-only property to a 3.2 server.

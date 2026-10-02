@@ -39,6 +39,14 @@ Two resolvers ship:
 SPI: a valid token with a valid `logistics_agent_uri` becomes an `Agent`;
 anything else is anonymous and the server answers 401.
 
+### Several sources of keys
+
+`ChainKeyResolver` combines resolvers: pinned PEM keys for some issuers
+(`StaticKeyResolver`), JWKS documents for others (`JwksKeyResolver`), the
+host's own key for its own token endpoint. The first resolver that knows the
+issuer answers. `JwksKeyResolver` works without a cache (every token fetches)
+and treats a failing cache as a miss, so a cache outage never turns into 401s.
+
 ## Issuing tokens
 
 `Auth\Jwt\Rs256Signer` signs with a PEM RSA private key (2048 bits or more)
@@ -59,6 +67,13 @@ of the handler.
 For a handful of airline partners this is enough and keeps one less service
 to run and secure; partners only ever see a token URL, so a real identity
 provider can replace it later without them changing anything else.
+
+### Publishing your keys
+
+`JwksEndpoint` is a PSR-15 handler serving the JWKS document for one or more
+`Rs256Signer`s (the current key and the one being retired). Mount it at
+`/.well-known/jwks.json`; partners point a `JwksKeyResolver` at it and key
+rotation needs no out-of-band exchange.
 
 ## Where the boundary is
 

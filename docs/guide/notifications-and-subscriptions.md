@@ -24,9 +24,19 @@ egress stays under the host's control and a slow partner never slows a request.
 
 ```php
 foreach ($outbox->drain() as $outbound) {
-    $client->sendNotification($outbound->recipient, $outbound->notification);
+    // The client is bound to one partner server; resolve the recipient's endpoint
+    // from your partner registry, or fall back to the spec's derivation.
+    $endpoint = $partners->endpointOf($outbound->recipient) ?? $outbound->suggestedEndpoint();
+    $client = $clients->for($endpoint);   // one OneRecordClient per partner, cached
+    $client->sendNotification($outbound->notification);
 }
 ```
+
+Every `OutboundNotification` carries an `id`. Keep it with your delivery row:
+retry on 5xx, 408 and 429 with backoff, give up on other 4xx, and never send
+the same id twice as a new notification. Partners may use the id to
+deduplicate; sending it as an `Idempotency-Key` header is a reasonable
+convention until the spec names one.
 
 ## Who gets what
 

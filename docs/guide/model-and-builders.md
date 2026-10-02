@@ -77,3 +77,12 @@ Servers must give embedded objects ids that never change, because change
 requests address them. `EmbeddedIdMinter` (default `Uuid5EmbeddedIdMinter`,
 the spec's recommended `internal:<uuid5>` scheme) mints them when a blank
 node enters a stored object; they are kept in the stored graph from then on.
+
+## Building events
+
+Logistics events are not logistics objects, so `ObjectBuilder::of()` refuses
+`cargo:LogisticsEvent`. Use `ObjectBuilder::ofEvent()` (or `ofEvent(Cargo::StatusUpdateEvent)`
+on data model 3.3), which validates against the event class's properties,
+requires `cargo:eventDate` and finishes with `buildEvent($iri, $object, $created)`;
+`cargo:eventFor` is set to the object unless given. Stores rehydrate events
+with `LogisticsEvent::fromStored()`, which validates nothing.

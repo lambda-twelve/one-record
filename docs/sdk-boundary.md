@@ -43,6 +43,7 @@ depend on itself and on what its row lists; everything else fails the build.
 | `Server\InMemory` | `Server\Spi`, `Server\Event`, and the wiring classes `ServerConfig`, `Services`, `ServerBuilder`, `OneRecordServer`, `IdGenerator`, `SystemClock` | Reference stores and a complete server; never endpoint code |
 | `Server` | everything above it | Routing, HTTP, endpoints, lifecycle, fan-out |
 | `Client` | the document layers, `Auth` | Talks to other servers; must never reach into ours |
+| `Testing` | everything | Doubles and store contract tests shipped to hosts; the one place PHPUnit may appear |
 
 `Change` and `Api` are a declared pair: a Change is itself an API document
 (`api:Change`) and lives in its own namespace only because of the size of its
