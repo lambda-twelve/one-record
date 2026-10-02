@@ -133,4 +133,105 @@ final class AdversarialFindingsTest extends ServerTestCase
         $holder->update(\LambdaTwelve\OneRecord\Model\Builder\ObjectBuilder::of(\LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo::Piece)->set(\LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo::goodsDescription, 'Hidden')->set(\LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo::coload, false)->build($piece->iri));
         self::assertSame([], $this->server->outbox->drain());
     }
+
+    public function testAr006APublisherCanAskAboutItsOwnObject(): void
+    {
+        $publisherObject = 'https://publisher.example/logistics-objects/p';
+        $this->server->subscriptions->offer(new \LambdaTwelve\OneRecord\Api\Subscription(new Iri(self::HOLDER), \LambdaTwelve\OneRecord\Api\TopicType::Identifier, $publisherObject, [\LambdaTwelve\OneRecord\Api\SubscriptionEventType::LogisticsObjectUpdated]));
+
+        $response = $this->request('GET', '/subscriptions?topicType=LOGISTICS_OBJECT_IDENTIFIER&topic=' . rawurlencode($publisherObject), self::PARTNER);
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        self::assertSame(\LambdaTwelve\OneRecord\Vocabulary\Generated\Api::Subscription, $response->getHeaderLine('Type'));
+        self::assertSame($publisherObject, self::arr(self::json($response)['api:hasTopic'])['@value']);
+    }
+
+    public function testAr014BulkEventsUseTheSameParsingAndValidationAsSingleOnes(): void
+    {
+        $this->server = $this->makeServer(bulkEvents: true);
+        $piece = $this->storePiece();
+        $this->server->policy->allow(new Iri(self::PARTNER), $piece->iri, [Permission::PostLogisticsEvent, Permission::GetLogisticsEvent]);
+        $context = ['c' => 'https://onerecord.iata.org/ns/cargo#'];
+        $valid = ['@context' => $context, '@type' => 'c:LogisticsEvent', 'c:eventDate' => ['@type' => 'http://www.w3.org/2001/XMLSchema#dateTime', '@value' => '2026-10-02T11:00:00Z'], 'c:eventFor' => [['@id' => $piece->iri->value]]];
+
+        // An alias for the cargo namespace names the target like any other prefix would.
+        $response = $this->request('POST', '/logistics-events', body: json_encode($valid, JSON_THROW_ON_ERROR));
+        self::assertSame(207, $response->getStatusCode(), (string) $response->getBody());
+        self::assertSame(1, self::json($response)['api:hasTotalCreated']);
+
+        // Content the single route refuses is refused per target here too.
+        $invalid = $valid + ['https://example/unknown' => 'x'];
+        $single = $this->request('POST', '/logistics-objects/piece-1/logistics-events', body: json_encode(array_diff_key($invalid, ['c:eventFor' => 1]), JSON_THROW_ON_ERROR));
+        self::assertSame(400, $single->getStatusCode());
+        $bulk = $this->request('POST', '/logistics-events', body: json_encode($invalid, JSON_THROW_ON_ERROR));
+        self::assertSame(207, $bulk->getStatusCode(), (string) $bulk->getBody());
+        $body = self::json($bulk);
+        self::assertSame(0, $body['api:hasTotalCreated']);
+        self::assertSame(400, self::arr(self::arr($body['api:hasCreationResult'])[0])['api:hasHTTPStatus']);
+        self::assertSame(1, self::json($this->request('GET', '/logistics-objects/piece-1/logistics-events'))['api:hasTotalItems'], 'nothing invalid was stored');
+    }
+
+    public function testAr018TypedLinksInHistoricalReadsCarryTheTimestamp(): void
+    {
+        $shipment = new Iri(self::BASE . '/logistics-objects/shipment-1');
+        $this->server->objects->create(\LambdaTwelve\OneRecord\Model\Builder\ObjectBuilder::of(\LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo::Shipment)->set(\LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo::goodsDescription, 'Books')->build($shipment), $this->clock->now());
+        $piece = \LambdaTwelve\OneRecord\Model\Builder\ObjectBuilder::of(\LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo::Piece)->set(\LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo::coload, false)->build(new Iri(self::BASE . '/logistics-objects/piece-1'));
+        // A typed reference: {"@id": shipment, "@type": "cargo:Shipment"}.
+        $piece->graph->add(new \LambdaTwelve\OneRecord\Rdf\Triple($piece->iri, new Iri(\LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo::ofShipment), $shipment));
+        $piece->graph->add(new \LambdaTwelve\OneRecord\Rdf\Triple($shipment, new Iri(\LambdaTwelve\OneRecord\Rdf\Graph::RDF_TYPE), new Iri(\LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo::Shipment)));
+        $this->server->objects->create($piece, $this->clock->now());
+        $this->server->policy->allow(new Iri(self::PARTNER), $piece->iri, [Permission::GetLogisticsObject]);
+
+        $body = self::json($this->request('GET', '/logistics-objects/piece-1?at=20261002T120000Z'));
+
+        self::assertSame(self::BASE . '/logistics-objects/piece-1?at=20261002T120000Z', $body['@id']);
+        $link = self::arr($body['cargo:ofShipment']);
+        self::assertSame($shipment->value . '?at=20261002T120000Z', $link['@id'], 'a typed link is still a link into the same instant');
+        self::assertSame('cargo:Shipment', $link['@type']);
+    }
+
+    public function testAr020ExplicitExclusionsAndUnservedBodyVersionsAreHonoured(): void
+    {
+        self::assertError($this->request('GET', '/', self::HOLDER, ['Accept' => 'application/ld+json;q=0, */*;q=1']), 406);
+        self::assertSame(200, $this->request('GET', '/', self::HOLDER, ['Accept' => '*/*;q=0.1, application/ld+json;q=0.9; version=2.3.0'])->getStatusCode());
+
+        $this->server = $this->makeServerSpeaking([\LambdaTwelve\OneRecord\Spec\ApiVersion::V2_2_0]);
+        $body = $this->piece('p')->toJson();
+        self::assertError($this->request('POST', '/logistics-objects', self::HOLDER, ['Accept' => 'application/ld+json; version=2.2.0', 'Content-Type' => 'application/ld+json; version=2.3.0'], $body), 415);
+        self::assertSame(201, $this->request('POST', '/logistics-objects', self::HOLDER, ['Accept' => 'application/ld+json; version=2.2.0', 'Content-Type' => 'application/ld+json; version=2.2.0'], $body)->getStatusCode());
+    }
+
+    public function testAr023InvalidInputIsA400NotA500(): void
+    {
+        $this->storePiece();
+        self::assertError($this->request('GET', '/logistics-objects/piece-1?at=2026-99-99T99:99:99Z'), 400, 'Invalid query parameter');
+        self::assertError($this->request('GET', '/logistics-objects/piece-1?at=20261399T000000Z'), 400, 'Invalid query parameter');
+        self::assertError($this->request('POST', '/logistics-objects', self::HOLDER, body: '{"@context": {"cargo": "https://onerecord.iata.org/ns/cargo#"}, "@type": "cargo:Piece", "cargo:coload": 1e400}'), 400, 'Invalid body request');
+    }
+
+    public function testAr024AnIdempotencyKeyReachesTheNotificationListener(): void
+    {
+        $body = (string) file_get_contents(__DIR__ . '/../Fixtures/spec/2026-07/Notification_example1.json');
+        $this->request('POST', '/notifications', self::PARTNER, ['Idempotency-Key' => 'delivery-42'], $body);
+        $this->request('POST', '/notifications', self::PARTNER, [], $body);
+        $received = $this->dispatcher->of(NotificationReceived::class);
+        self::assertCount(2, $received);
+        self::assertSame('delivery-42', $received[0]->idempotencyKey);
+        self::assertNull($received[1]->idempotencyKey);
+    }
+
+    public function testAr028ADelegateCannotRevokeAnotherDelegatesAccess(): void
+    {
+        $piece = $this->storePiece('piece-1', null);
+        $holder = new DataHolder($this->server->services);
+        $request = (new ActionRequests($this->server->services))->create(new AccessDelegation([Permission::GetLogisticsObject], [new Iri(self::PARTNER), new Iri(self::STRANGER)], [$piece->iri]), new Iri(self::HOLDER));
+        $holder->accept($request->iri);
+        $path = substr($request->iri->value, \strlen(self::BASE));
+
+        self::assertSame(200, $this->request('GET', $path, self::PARTNER)->getStatusCode(), 'a delegate may read the request');
+        self::assertError($this->request('DELETE', $path, self::PARTNER), 403, 'Not authorized');
+        self::assertSame(Decision::Allow, $this->server->policy->decide(new Agent(new Iri(self::STRANGER)), Action::ReadLogisticsObject, $piece->iri), 'the other delegate keeps its access');
+
+        self::assertSame(204, $this->request('DELETE', $path, self::HOLDER)->getStatusCode(), 'the requestor revokes');
+    }
 }

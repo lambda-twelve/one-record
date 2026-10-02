@@ -72,7 +72,9 @@ final class ClientCredentialsTokenProvider implements TokenProvider
             ->withHeader('Content-Type', 'application/x-www-form-urlencoded')
             ->withHeader('Accept', 'application/json');
         if ($this->basicAuth) {
-            $request = $request->withHeader('Authorization', 'Basic ' . base64_encode($this->clientId . ':' . $this->clientSecret));
+            // RFC 6749 §2.3.1: each part is form-encoded before the pair is base64-encoded, so a colon or
+            // percent in a credential survives (AR-019).
+            $request = $request->withHeader('Authorization', 'Basic ' . base64_encode(urlencode($this->clientId) . ':' . urlencode($this->clientSecret)));
         } else {
             $fields['client_id'] = $this->clientId;
             $fields['client_secret'] = $this->clientSecret;

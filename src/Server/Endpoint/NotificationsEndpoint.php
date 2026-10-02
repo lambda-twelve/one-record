@@ -25,7 +25,8 @@ final class NotificationsEndpoint extends AbstractEndpoint
         (new ContentNegotiation($this->services->config))->bodyVersion($request, $negotiated);
         $notification = Notification::fromJsonLd($this->services->body->json($request));
         $this->services->logger->info('Notification received', ['from' => $agent->iri->value, 'eventType' => $notification->eventType->name, 'object' => $notification->logisticsObject?->value]);
-        $this->services->dispatcher->dispatch(new NotificationReceived($notification, $agent));
+        $key = $request->getHeaderLine('Idempotency-Key');
+        $this->services->dispatcher->dispatch(new NotificationReceived($notification, $agent, $key === '' ? null : $key));
 
         return $this->services->responder->empty(204, $negotiated);
     }

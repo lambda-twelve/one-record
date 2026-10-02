@@ -295,4 +295,46 @@ final class OneRecordClientTest extends TestCase
         $unlimited = new \LambdaTwelve\OneRecord\Api\AccessDelegation([\LambdaTwelve\OneRecord\Api\Permission::GetLogisticsObject], [new Iri(self::PARTNER . '/logistics-objects/them')], [new Iri(self::PARTNER . '/logistics-objects/p1')]);
         self::assertSame(self::PARTNER . '/action-requests/d1', $client->requestAccessDelegation($unlimited)->value);
     }
+
+    public function testAr005DiscoveryReachesAPartnerThatSpeaksOnlyTheOlderVersion(): void
+    {
+        // A strict 2.2-only server refuses the 2.3 probe with 406; the client tries 2.2 next.
+        $this->http->queue($this->jsonLd(406, ['@context' => ['api' => 'https://onerecord.iata.org/ns/api#'], '@type' => 'api:Error', 'api:hasTitle' => 'Not acceptable'], ApiVersion::V2_2_0));
+        $this->http->queue($this->serverInformation([ApiVersion::V2_2_0]));
+        $client = $this->client();
+
+        self::assertSame(ApiVersion::V2_2_0, $client->apiVersion());
+        self::assertSame('application/ld+json; version=2.3.0', $this->http->requests[0]->getHeaderLine('Accept'));
+        self::assertSame('application/ld+json; version=2.2.0', $this->http->requests[1]->getHeaderLine('Accept'));
+
+        // Refusing every version is reported as such, not as a 406 of the first attempt.
+        $this->http = new FakeHttpClient();
+        $this->http->queue($this->jsonLd(406, ['@context' => ['api' => 'https://onerecord.iata.org/ns/api#'], '@type' => 'api:Error', 'api:hasTitle' => 'Not acceptable']));
+        $this->http->queue($this->jsonLd(406, ['@context' => ['api' => 'https://onerecord.iata.org/ns/api#'], '@type' => 'api:Error', 'api:hasTitle' => 'Not acceptable']));
+        $this->expectException(ClientException::class);
+        $this->expectExceptionMessage('accepts none of the API versions');
+        $this->client()->apiVersion();
+    }
+
+    public function testAr017AResponseAboutAnotherObjectIsRefused(): void
+    {
+        $this->http->queue($this->serverInformation([ApiVersion::V2_3_0]));
+        $this->http->queue($this->jsonLd(200, ['@context' => ['cargo' => 'https://onerecord.iata.org/ns/cargo#'], '@id' => self::PARTNER . '/logistics-objects/different', '@type' => 'cargo:Piece'], headers: ['Revision' => '1', 'Latest-Revision' => '1']));
+        $client = $this->client();
+        try {
+            $client->getLogisticsObject(self::PARTNER . '/logistics-objects/p');
+            self::fail('the body is about another object');
+        } catch (ClientException $e) {
+            self::assertStringContainsString('answered with a document about', $e->getMessage());
+        }
+
+        // A historical read may be rooted at the ?at= URL; a flat @graph is rooted at the requested node wherever it sits.
+        $this->http->queue($this->jsonLd(200, ['@context' => ['cargo' => 'https://onerecord.iata.org/ns/cargo#'], '@id' => self::PARTNER . '/logistics-objects/p?at=20261002T100000Z', '@type' => 'cargo:Piece'], headers: ['Revision' => '1', 'Latest-Revision' => '2']));
+        self::assertSame(1, $client->getLogisticsObject(self::PARTNER . '/logistics-objects/p', at: new DateTimeImmutable('2026-10-02T10:00:00Z'))->revision);
+        $this->http->queue($this->jsonLd(200, ['@context' => ['cargo' => 'https://onerecord.iata.org/ns/cargo#'], '@graph' => [
+            ['@id' => 'neone:w1', '@type' => 'cargo:Value', 'cargo:numericalValue' => 1.5],
+            ['@id' => self::PARTNER . '/logistics-objects/p', '@type' => 'cargo:Piece', 'cargo:grossWeight' => ['@id' => 'neone:w1']],
+        ]], headers: ['Revision' => '1', 'Latest-Revision' => '1']));
+        self::assertSame(self::PARTNER . '/logistics-objects/p', $client->getLogisticsObject(self::PARTNER . '/logistics-objects/p')->object?->iri->value);
+    }
 }

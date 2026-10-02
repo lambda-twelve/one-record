@@ -21,7 +21,8 @@ final class InMemoryLogisticsEventStore implements LogisticsEventStore
 
     public function append(LogisticsEvent $event): void
     {
-        if (isset($this->events[$event->logisticsObject->value][$event->iri->value])) {
+        if ($this->get($event->iri) !== null) {
+            // Uniqueness at the scope get() looks up: the whole server, not one object's bucket (AR-022).
             throw StoreException::alreadyExists($event->iri);
         }
         $this->events[$event->logisticsObject->value][$event->iri->value] = $event;

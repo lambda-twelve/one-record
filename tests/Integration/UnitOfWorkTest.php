@@ -84,7 +84,7 @@ final class UnitOfWorkTest extends ServerTestCase
         $outbox = $this->server->outbox->drain();
         self::assertCount(1, $outbox, 'objects created over HTTP fan out like those created in PHP');
         self::assertSame(NotificationEventType::LogisticsObjectCreated, $outbox[0]->notification->eventType);
-        self::assertSame(self::HOLDER, $outbox[0]->notification->triggeredBy?->value);
+        self::assertStringStartsWith(self::BASE . '/action-requests/', (string) $outbox[0]->notification->triggeredBy?->value, 'isTriggeredBy is the subscription request, not the creating agent (AR-021)');
         self::assertMatchesRegularExpression('/^[0-9a-f-]{36}$/', $outbox[0]->id, 'every outbound notification has a stable id to dedupe on');
     }
 }

@@ -112,6 +112,21 @@ abstract class LogisticsObjectStoreContract extends TestCase
         self::assertSame(2, $store->at($iri, new DateTimeImmutable('2030-01-01T00:00:00Z'))?->revision);
     }
 
+    public function testStoredRevisionsAreSnapshots(): void
+    {
+        $store = $this->createStore();
+        $object = $this->object('p1');
+        $store->create($object, new DateTimeImmutable('2026-10-02T12:00:00Z'));
+
+        // Editing the object handed in, or the one read back, must not rewrite history (AR-015).
+        $object->graph->add(new \LambdaTwelve\OneRecord\Rdf\Triple($object->iri, new Iri(Cargo::goodsDescription), \LambdaTwelve\OneRecord\Rdf\Literal::string('INJECTED')));
+        $read = $store->latest($object->iri);
+        self::assertNotNull($read);
+        self::assertSame(['Books'], array_map(static fn($t): string => $t instanceof \LambdaTwelve\OneRecord\Rdf\Literal ? $t->lexical : '', $read->object->values(Cargo::goodsDescription)));
+        $read->object->graph->add(new \LambdaTwelve\OneRecord\Rdf\Triple($object->iri, new Iri(Cargo::goodsDescription), \LambdaTwelve\OneRecord\Rdf\Literal::string('INJECTED')));
+        self::assertCount(1, $store->revision($object->iri, 1)?->object->values(Cargo::goodsDescription) ?? []);
+    }
+
     public function testEraseRemovesEveryRevision(): void
     {
         $store = $this->createStore();

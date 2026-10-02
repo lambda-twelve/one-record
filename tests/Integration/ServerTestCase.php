@@ -67,6 +67,25 @@ abstract class ServerTestCase extends TestCase
     }
 
     /**
+     * @param non-empty-list<\LambdaTwelve\OneRecord\Spec\ApiVersion> $versions
+     */
+    protected function makeServerSpeaking(array $versions): InMemoryServer
+    {
+        $factory = new Psr17Factory();
+        $server = new InMemoryServer(
+            new ServerConfig(self::BASE, new Iri(self::HOLDER), apiVersions: $versions, dataHolderType: Cargo::Company),
+            new HeaderAuthenticator(),
+            $this->clock,
+            $this->dispatcher,
+            $factory,
+            $factory,
+        );
+        $server->policy->addInternal(new Iri(self::HOLDER));
+
+        return $server;
+    }
+
+    /**
      * @param array<string, string> $headers
      */
     protected function request(string $method, string $path, ?string $agent = self::PARTNER, array $headers = [], ?string $body = null): ResponseInterface

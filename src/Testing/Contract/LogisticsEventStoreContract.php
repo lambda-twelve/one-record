@@ -105,6 +105,18 @@ abstract class LogisticsEventStoreContract extends TestCase
             self::assertSame(StoreException::ALREADY_EXISTS, $e->kind);
         }
         self::assertTrue($store->get(new Iri(self::OBJECT . '/logistics-events/a'))?->matchesCode('DEP'), 'the original stays');
+
+        // The same IRI filed under another object is still the same IRI (AR-022).
+        $sameIriOtherObject = ObjectBuilder::ofEvent()
+            ->set(Cargo::eventDate, Values::dateTime(new DateTimeImmutable('2026-10-02T10:00:00Z')))
+            ->buildEvent(new Iri(self::OBJECT . '/logistics-events/a'), new Iri(self::OTHER), new DateTimeImmutable('2026-10-02T12:30:00Z'));
+        try {
+            $store->append($sameIriOtherObject);
+            self::fail('event IRIs are unique on the server');
+        } catch (StoreException $e) {
+            self::assertSame(StoreException::ALREADY_EXISTS, $e->kind);
+        }
+        self::assertSame([], $store->query(new Iri(self::OTHER), EventQuery::all()));
     }
 
     public function testEraseForRemovesOneObjectsEventsOnly(): void

@@ -216,6 +216,10 @@ final class Expander
         if (\is_int($value)) {
             return Literal::integer($value);
         }
+        if (\is_float($value) && !is_finite($value)) {
+            // json_decode turns 1e400 into INF; RDF has no lexical form for it (AR-023).
+            throw JsonLdException::at($path, 'A number must be finite');
+        }
         if (\is_float($value)) {
             return Literal::double($value);
         }
@@ -252,6 +256,10 @@ final class Expander
             }
         }
         $raw = $object['@value'];
+        if (\is_float($raw) && !is_finite($raw)) {
+            // json_decode turns 1e400 into INF; RDF has no lexical form for it (AR-023).
+            throw JsonLdException::at($path, 'A number must be finite');
+        }
         if (!\is_string($raw) && !\is_bool($raw) && !\is_int($raw) && !\is_float($raw)) {
             throw JsonLdException::at(self::join($path, '@value'), '@value must be a string, number or boolean');
         }

@@ -45,7 +45,9 @@ final class ActionRequestEndpoint extends AbstractEndpoint
             throw HttpException::notFound('Action Request', $iri->value);
         }
         if ($method === 'DELETE') {
-            if (!$this->isParty($agent, $actionRequest)) {
+            // Being a party lets you read a request; revoking it is the requestor's right, or the
+            // policy's call. A delegate of a shared delegation must not be able to cut off the others (AR-028).
+            if (!$agent->is($actionRequest->requestedBy)) {
                 $this->decide($agent, Action::RevokeActionRequest, $iri);
             }
 

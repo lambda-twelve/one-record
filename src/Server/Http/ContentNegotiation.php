@@ -54,6 +54,10 @@ final class ContentNegotiation
         if (isset($parameters['version']) && $version === null) {
             throw HttpException::unsupportedMediaType(\sprintf('Unknown API version "%s" in Content-Type.', $parameters['version']));
         }
+        if ($version !== null && !\in_array($version, $this->config->apiVersions, true)) {
+            // A version this server was configured not to serve is not accepted on input either (AR-020).
+            throw HttpException::unsupportedMediaType(\sprintf('API version %s is not served here; this server speaks %s.', $version->value, implode(', ', array_map(static fn(ApiVersion $v): string => $v->value, $this->config->apiVersions))));
+        }
 
         return $version ?? $negotiated->version;
     }
@@ -66,37 +70,36 @@ final class ContentNegotiation
         if (trim($accept) === '') {
             return [true, null];
         }
-        $best = null;
-        $bestQ = -1.0;
+        // RFC 9110 §12.5.1: the most specific matching range decides, and q=0 there means
+        // "not acceptable" even if a wildcard elsewhere would allow it (AR-020).
+        $bestSpecificity = -1;
+        $bestQ = 0.0;
         $version = null;
         foreach (explode(',', $accept) as $range) {
             [$type, $parameters] = self::splitMediaType($range);
             $q = isset($parameters['q']) && is_numeric($parameters['q']) ? (float) $parameters['q'] : 1.0;
-            if ($q <= 0) {
+            $specificity = match ($type) {
+                self::JSON_LD => 3,
+                'application/json' => 2,
+                'application/*' => 1,
+                '*/*' => 0,
+                default => -1,
+            };
+            if ($specificity < 0 || $specificity < $bestSpecificity || ($specificity === $bestSpecificity && $q <= $bestQ)) {
                 continue;
             }
-            $matches = $type === self::JSON_LD || $type === 'application/*' || $type === '*/*' || $type === 'application/json';
-            if (!$matches) {
-                continue;
-            }
-            // Prefer the most specific match, then the highest q.
-            $specificity = $type === self::JSON_LD ? 3 : ($type === 'application/json' ? 2 : ($type === 'application/*' ? 1 : 0));
-            $score = $specificity + $q;
-            if ($score > $bestQ) {
-                $bestQ = $score;
-                $best = $type;
-                if (isset($parameters['version'])) {
-                    $version = ApiVersion::tryFromString($parameters['version']);
-                    if ($version === null) {
-                        throw HttpException::notAcceptable(\sprintf('Unknown API version "%s" in Accept.', $parameters['version']));
-                    }
-                } else {
-                    $version = null;
+            $bestSpecificity = $specificity;
+            $bestQ = $q;
+            $version = null;
+            if ($q > 0 && isset($parameters['version'])) {
+                $version = ApiVersion::tryFromString($parameters['version']);
+                if ($version === null) {
+                    throw HttpException::notAcceptable(\sprintf('Unknown API version "%s" in Accept.', $parameters['version']));
                 }
             }
         }
 
-        return [$best !== null, $version];
+        return [$bestSpecificity >= 0 && $bestQ > 0, $version];
     }
 
     private function language(ServerRequestInterface $request): string

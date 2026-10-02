@@ -47,7 +47,17 @@ final class SubscriptionsEndpoint extends AbstractEndpoint
         if ($topic === '') {
             throw HttpException::invalidQuery('topic is required.', 'topic');
         }
-        $this->validateTopic($topicType, $topic);
+        // A publisher asks about its own object, which lives on its server, not here: only the
+        // shape is checked, not local existence (AR-006). Creating a subscription is the other direction.
+        if ($topicType === TopicType::Type) {
+            $this->validateTopic($topicType, $topic);
+        } else {
+            try {
+                new Iri($topic);
+            } catch (InvalidArgumentException) {
+                throw HttpException::invalidQuery('topic must be a logistics object URI.', 'topic');
+            }
+        }
 
         $offers = $this->services->subscriptions->offered($topicType, $topic);
         if (\count($offers) === 1) {

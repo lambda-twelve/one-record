@@ -60,7 +60,8 @@ final class CreateLogisticsObjectEndpoint extends AbstractEndpoint
             throw HttpException::conflict('A logistics object with this URI already exists.', $iri->value);
         }
         $this->services->dispatcher->dispatch(new LogisticsObjectCreated($stored, $agent->iri));
-        (new Fanout($this->services))->logisticsObjectCreated($stored, $agent->iri);
+        // No action request causes a creation; fan-out then names the subscription request (AR-021).
+        (new Fanout($this->services))->logisticsObjectCreated($stored);
 
         return $this->services->responder->empty(201, $negotiated, ['Location' => $iri->value, 'Type' => $stored->object->mostSpecificType($this->services->vocabulary) ?? 'https://onerecord.iata.org/ns/cargo#LogisticsObject']);
     }

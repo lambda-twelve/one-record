@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace LambdaTwelve\OneRecord\Server\Endpoint;
 
 use DateTimeImmutable;
+use Exception;
 use LambdaTwelve\OneRecord\JsonLd\Context;
 use LambdaTwelve\OneRecord\JsonLd\Writer;
 use LambdaTwelve\OneRecord\Model\LogisticsObject;
@@ -166,18 +167,32 @@ abstract class AbstractEndpoint implements Endpoint
      */
     private function rewriteLocalLinks(Graph $graph, string $atParameter, Iri $root, Iri $historicalRoot): Graph
     {
+        // A link to another object of this server gets the same ?at=, whether it is bare or typed
+        // ({"@id", "@type"}); only an object embedded with its data (?embedded=true) keeps its own
+        // identity, because its triples are already the historical ones (AR-018).
+        $links = [];
+        foreach ($graph as $triple) {
+            $object = $triple->object;
+            if (!$object instanceof Iri || $object->equals($root) || LogisticsObject::isEmbeddedId($object)) {
+                continue;
+            }
+            $relative = $this->services->config->relativePath($object);
+            if ($relative === null || preg_match('#^logistics-objects/[^/]+$#', $relative) !== 1) {
+                continue;
+            }
+            $onlyTypes = array_filter($graph->about($object), static fn(Triple $t): bool => $t->predicate->value !== Graph::RDF_TYPE) === [];
+            if ($onlyTypes) {
+                $links[$object->value] = new Iri($object->value . '?at=' . $atParameter);
+            }
+        }
         $rewritten = new Graph();
         foreach ($graph as $triple) {
-            $subject = $triple->subject->equals($root) ? $historicalRoot : $triple->subject;
+            $subject = $triple->subject->equals($root) ? $historicalRoot : ($triple->subject instanceof Iri ? ($links[$triple->subject->value] ?? $triple->subject) : $triple->subject);
             $object = $triple->object;
             if ($object->equals($root)) {
                 $object = $historicalRoot;
-            }
-            if ($object instanceof Iri && !LogisticsObject::isEmbeddedId($object) && $graph->about($object) === []) {
-                $relative = $this->services->config->relativePath($object);
-                if ($relative !== null && preg_match('#^logistics-objects/[^/]+$#', $relative) === 1) {
-                    $object = new Iri($object->value . '?at=' . $atParameter);
-                }
+            } elseif ($object instanceof Iri && isset($links[$object->value])) {
+                $object = $links[$object->value];
             }
             $rewritten->add(new Triple($subject, $triple->predicate, $object));
         }
@@ -191,10 +206,20 @@ abstract class AbstractEndpoint implements Endpoint
     public static function parseAt(string $value): DateTimeImmutable
     {
         $trimmed = trim($value);
-        $parsed = preg_match('/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/', $trimmed, $m) === 1
-            ? DateTimeImmutable::createFromFormat('!Y-m-d\TH:i:sP', \sprintf('%s-%s-%sT%s:%s:%s+00:00', $m[1], $m[2], $m[3], $m[4], $m[5], $m[6]))
-            : (preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/', $trimmed) === 1 ? new DateTimeImmutable($trimmed) : false);
-        if ($parsed === false) {
+        $parsed = null;
+        try {
+            if (preg_match('/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/', $trimmed, $m) === 1) {
+                $parsed = checkdate((int) $m[2], (int) $m[3], (int) $m[1]) && (int) $m[4] < 24 && (int) $m[5] < 60 && (int) $m[6] < 61
+                    ? DateTimeImmutable::createFromFormat('!Y-m-d\TH:i:sP', \sprintf('%s-%s-%sT%s:%s:%s+00:00', $m[1], $m[2], $m[3], $m[4], $m[5], $m[6]))
+                    : false;
+            } elseif (preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/', $trimmed) === 1) {
+                $parsed = \LambdaTwelve\OneRecord\JsonLd\Nodes::parseDateTime($trimmed);
+            }
+        } catch (Exception) {
+            // PHP's date constructor throws on values the regex let through (a 99th month); that is a 400, not a 500 (AR-023).
+            $parsed = null;
+        }
+        if ($parsed === false || $parsed === null) {
             throw HttpException::invalidQuery(\sprintf('"%s" is not a timestamp in the form YYYYMMDDThhmmssZ.', $trimmed), 'at');
         }
 

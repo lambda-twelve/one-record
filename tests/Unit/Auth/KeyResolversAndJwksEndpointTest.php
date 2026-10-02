@@ -120,4 +120,22 @@ final class KeyResolversAndJwksEndpointTest extends TestCase
         self::assertSame('', (string) $endpoint->handle(new ServerRequest('HEAD', 'https://1r.example.com/.well-known/jwks.json'))->getBody());
         self::assertSame(405, $endpoint->handle(new ServerRequest('POST', 'https://1r.example.com/.well-known/jwks.json'))->getStatusCode());
     }
+
+    public function testAr025UnknownKeyIdsRefreshAtMostOncePerCooldown(): void
+    {
+        $factory = new Psr17Factory();
+        $signer = new Rs256Signer(TestKeys::pair('jwks')['private'], 'https://idp.example', new FixedClock(), 'k1');
+        $jwks = json_encode(['keys' => [$signer->publicJwk()]], JSON_THROW_ON_ERROR);
+        $http = new FakeHttpClient();
+        for ($i = 0; $i < 6; $i++) {
+            $http->queue(new Response(200, [], $jwks));
+        }
+        $resolver = new JwksKeyResolver(['https://idp.example' => 'https://idp.example/jwks'], $http, $factory, new \LambdaTwelve\OneRecord\Testing\ArrayCache());
+
+        self::assertCount(1, $resolver->publicKeys('https://idp.example', 'k1'), 'warm-up');
+        foreach (['bogus1', 'bogus2', 'bogus3', 'bogus4', 'bogus5'] as $kid) {
+            $resolver->publicKeys('https://idp.example', $kid);
+        }
+        self::assertCount(2, $http->requests, 'one fetch to warm up, one refresh for the first unknown key id, then the cooldown holds');
+    }
 }

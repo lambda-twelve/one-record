@@ -110,7 +110,8 @@ final class TokenEndpoint implements RequestHandlerInterface
         }
         [$id, $secret] = explode(':', $decoded, 2);
 
-        return [rawurldecode($id), rawurldecode($secret), true];
+        // The parts are application/x-www-form-urlencoded (RFC 6749 §2.3.1): + is a space, %41 is A.
+        return [urldecode($id), urldecode($secret), true];
     }
 
     private function error(int $status, string $code, string $description): ResponseInterface

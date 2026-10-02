@@ -14,8 +14,13 @@ use LambdaTwelve\OneRecord\Server\Spi\Agent;
  */
 final readonly class NotificationReceived
 {
+    /**
+     * @param ?string $idempotencyKey the sender's Idempotency-Key header when it sent one; the same
+     *                                value on a later delivery means a retry of this notification
+     */
     public function __construct(
         public Notification $notification,
         public Agent $sentBy,
+        public ?string $idempotencyKey = null,
     ) {}
 }

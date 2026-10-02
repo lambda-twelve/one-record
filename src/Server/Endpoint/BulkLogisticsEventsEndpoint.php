@@ -4,14 +4,18 @@ declare(strict_types=1);
 
 namespace LambdaTwelve\OneRecord\Server\Endpoint;
 
-use InvalidArgumentException;
+use DateTimeImmutable;
 use LambdaTwelve\OneRecord\Api\Error;
 use LambdaTwelve\OneRecord\Api\ErrorDocument;
+use LambdaTwelve\OneRecord\Api\InvalidDocument;
+use LambdaTwelve\OneRecord\JsonLd\ExpandedDocument;
+use LambdaTwelve\OneRecord\JsonLd\JsonLd;
 use LambdaTwelve\OneRecord\JsonLd\JsonLdException;
 use LambdaTwelve\OneRecord\JsonLd\Nodes;
 use LambdaTwelve\OneRecord\Model\LogisticsEvent;
-use LambdaTwelve\OneRecord\Model\ModelException;
+use LambdaTwelve\OneRecord\Rdf\Graph;
 use LambdaTwelve\OneRecord\Rdf\Iri;
+use LambdaTwelve\OneRecord\Rdf\Triple;
 use LambdaTwelve\OneRecord\Server\Event\LogisticsEventReceived;
 use LambdaTwelve\OneRecord\Server\Http\ContentNegotiation;
 use LambdaTwelve\OneRecord\Server\Http\HttpException;
@@ -37,22 +41,21 @@ final class BulkLogisticsEventsEndpoint extends AbstractEndpoint
     {
         (new ContentNegotiation($this->services->config))->bodyVersion($request, $negotiated);
         $json = $this->services->body->json($request);
-        $targets = $json['cargo:eventFor'] ?? $json[Cargo::eventFor] ?? null;
+        // Expand once, so an alias for cargo:eventFor is understood like the single-object route does (AR-014).
+        try {
+            $expanded = JsonLd::expand($json);
+        } catch (JsonLdException $e) {
+            throw HttpException::badRequest($e->getMessage(), null, 'Invalid body request');
+        }
         $targetIris = [];
-        foreach (\is_array($targets) ? (array_is_list($targets) ? $targets : [$targets]) : [] as $target) {
-            $id = \is_array($target) ? ($target['@id'] ?? null) : $target;
-            if (\is_string($id) && $id !== '') {
-                try {
-                    $targetIris[$id] = new Iri($id);
-                } catch (InvalidArgumentException) {
-                    throw HttpException::badRequest(\sprintf('"%s" is not a logistics object URI.', $id), Cargo::eventFor, 'Invalid resource');
-                }
+        foreach ($expanded->graph->objects($expanded->root, Cargo::eventFor) as $target) {
+            if ($target instanceof Iri) {
+                $targetIris[$target->value] = $target;
             }
         }
         if ($targetIris === []) {
             throw HttpException::badRequest('cargo:eventFor must list the logistics objects the event is for.', Cargo::eventFor, 'Invalid resource');
         }
-        unset($json['cargo:eventFor'], $json[Cargo::eventFor]);
 
         $now = $this->services->clock->now();
         $results = [];
@@ -71,12 +74,15 @@ final class BulkLogisticsEventsEndpoint extends AbstractEndpoint
                 continue;
             }
             $eventIri = $this->services->config->logisticsEventIri($objectId ?? '', $this->services->ids->next());
-            $body = [...$json, 'cargo:eventFor' => Nodes::ref($target)];
+            $event = self::eventFor($expanded, $eventIri, $target, $now);
             try {
-                $event = LogisticsEvent::fromJsonLd($body, $eventIri, $target, $now);
-            } catch (ModelException $e) {
-                // The body is the same for every object, so a malformed event fails the whole request.
-                throw HttpException::badRequest($e->getMessage(), null, $e->getPrevious() instanceof JsonLdException ? 'Invalid body request' : 'Invalid resource');
+                if ($event->eventDate() === null) {
+                    throw new InvalidDocument('Every logistics event must have a cargo:eventDate.', [Error::of('Invalid resource', '400', 'Every logistics event must have a cargo:eventDate.', Cargo::eventDate)]);
+                }
+                LogisticsEventsEndpoint::validateEvent($this->services->vocabulary, $event, $target);
+            } catch (InvalidDocument $e) {
+                $results[] = $this->result(400, $target, null, $e->errors[0] ?? Error::of('Invalid resource', '400', $e->getMessage()), $negotiated->version);
+                continue;
             }
             $this->services->events->append($event);
             $this->services->dispatcher->dispatch(new LogisticsEventReceived($event, $agent));
@@ -96,6 +102,26 @@ final class BulkLogisticsEventsEndpoint extends AbstractEndpoint
         ];
 
         return $this->services->responder->jsonLd(207, $document, $negotiated, Api::MultiStatusResponse);
+    }
+
+    /**
+     * The posted event as one object's event: the root renamed to the event's
+     * URI, every eventFor replaced by this one target.
+     */
+    private static function eventFor(ExpandedDocument $expanded, Iri $eventIri, Iri $target, DateTimeImmutable $now): LogisticsEvent
+    {
+        $graph = new Graph();
+        foreach ($expanded->graph as $triple) {
+            if ($triple->predicate->value === Cargo::eventFor && $triple->subject->equals($expanded->root)) {
+                continue;
+            }
+            $subject = $triple->subject->equals($expanded->root) ? $eventIri : $triple->subject;
+            $object = $triple->object->equals($expanded->root) ? $eventIri : $triple->object;
+            $graph->add(new Triple($subject, $triple->predicate, $object));
+        }
+        $graph->add(new Triple($eventIri, new Iri(Cargo::eventFor), $target));
+
+        return new LogisticsEvent($eventIri, $target, $graph, $now);
     }
 
     /**

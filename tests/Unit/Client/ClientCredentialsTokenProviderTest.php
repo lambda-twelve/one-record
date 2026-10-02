@@ -97,4 +97,24 @@ final class ClientCredentialsTokenProviderTest extends TestCase
             }
         }
     }
+
+    public function testAr019ReservedCharactersSurviveBasicAuthenticationEndToEnd(): void
+    {
+        $factory = new Psr17Factory();
+        $credentials = new \LambdaTwelve\OneRecord\Auth\InMemoryClientCredentials();
+        $credentials->add('a:b', 'p%41 +x', new \LambdaTwelve\OneRecord\Rdf\Iri('https://1r.example.com/logistics-objects/forwarder'));
+        $signer = new \LambdaTwelve\OneRecord\Auth\Jwt\Rs256Signer(\LambdaTwelve\OneRecord\Testing\TestKeys::pair('basic')['private'], 'https://1r.example.com', new FixedClock());
+        $endpoint = new \LambdaTwelve\OneRecord\Auth\TokenEndpoint($credentials, $signer, $factory, $factory);
+        $http = new \LambdaTwelve\OneRecord\Testing\InProcessHttpClient($endpoint, $factory, $factory);
+
+        $provider = new ClientCredentialsTokenProvider($http, $factory, $factory, new FixedClock(), 'https://1r.example.com/oauth/token', 'a:b', 'p%41 +x', basicAuth: true);
+        self::assertNotSame('', $provider->token('https://1r.example.com'), 'RFC 6749 form-encoding on both sides');
+
+        // A conforming external client that form-encodes by hand is accepted too.
+        $request = $factory->createServerRequest('POST', 'https://1r.example.com/oauth/token')
+            ->withHeader('Content-Type', 'application/x-www-form-urlencoded')
+            ->withHeader('Authorization', 'Basic ' . base64_encode('a%3Ab:p%2541+%2Bx'))
+            ->withBody($factory->createStream('grant_type=client_credentials'));
+        self::assertSame(200, $endpoint->handle($request)->getStatusCode());
+    }
 }

@@ -49,7 +49,9 @@ final class SubscriptionsDelegationsAndVerificationTest extends ServerTestCase
         self::assertError($this->request('GET', '/subscriptions?topicType=NOPE&topic=x'), 400, 'Invalid query parameter');
         self::assertError($this->request('GET', '/subscriptions?topicType=LOGISTICS_OBJECT_TYPE'), 400, 'Invalid query parameter');
         self::assertError($this->request('GET', '/subscriptions?topicType=LOGISTICS_OBJECT_TYPE&topic=' . rawurlencode(Cargo::Value)), 400, 'Invalid resource');
-        self::assertError($this->request('GET', '/subscriptions?topicType=LOGISTICS_OBJECT_IDENTIFIER&topic=' . rawurlencode('https://elsewhere.example/logistics-objects/x')), 400, 'Invalid resource');
+        // A publisher asks about its own object, which lives on its server: not a local-existence check (AR-006).
+        self::assertSame(200, $this->request('GET', '/subscriptions?topicType=LOGISTICS_OBJECT_IDENTIFIER&topic=' . rawurlencode('https://elsewhere.example/logistics-objects/x'))->getStatusCode());
+        self::assertError($this->request('GET', '/subscriptions?topicType=LOGISTICS_OBJECT_IDENTIFIER&topic=' . rawurlencode('not a uri')), 400, 'Invalid query parameter');
         self::assertError($this->request('GET', $query, null), 401);
 
         // No interest registered: an empty collection, not an error.

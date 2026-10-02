@@ -6,6 +6,7 @@ namespace LambdaTwelve\OneRecord\Server\InMemory;
 
 use DateTimeImmutable;
 use LambdaTwelve\OneRecord\Model\LogisticsObject;
+use LambdaTwelve\OneRecord\Rdf\Graph;
 use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Server\Spi\LogisticsObjectStore;
 use LambdaTwelve\OneRecord\Server\Spi\StoredObject;
@@ -58,7 +59,7 @@ final class InMemoryLogisticsObjectStore implements LogisticsObjectStore
         if (isset($this->revisions[$object->iri->value])) {
             throw StoreException::alreadyExists($object->iri);
         }
-        $this->revisions[$object->iri->value] = [['object' => $object, 'at' => $at]];
+        $this->revisions[$object->iri->value] = [['object' => self::snapshot($object), 'at' => $at]];
 
         return $this->stored($object->iri, 1);
     }
@@ -72,9 +73,20 @@ final class InMemoryLogisticsObjectStore implements LogisticsObjectStore
         if (\count($revisions) !== $expectedCurrent) {
             throw StoreException::revisionConflict($object->iri, $expectedCurrent, \count($revisions));
         }
-        $this->revisions[$object->iri->value][] = ['object' => $object, 'at' => $at];
+        $this->revisions[$object->iri->value][] = ['object' => self::snapshot($object), 'at' => $at];
 
         return $this->stored($object->iri, $expectedCurrent + 1);
+    }
+
+    /**
+     * Graph is mutable by design (builders and the applier edit one); a stored
+     * revision must not change when a caller keeps editing the object it passed
+     * in or the one it read back (AR-015). A database store gets this for free
+     * by serialising; the reference store copies.
+     */
+    private static function snapshot(LogisticsObject $object): LogisticsObject
+    {
+        return $object->withGraph(new Graph($object->graph));
     }
 
     public function erase(Iri $iri): void
@@ -87,6 +99,6 @@ final class InMemoryLogisticsObjectStore implements LogisticsObjectStore
         $revisions = $this->revisions[$iri->value];
         $entry = $revisions[$revision - 1];
 
-        return new StoredObject($entry['object'], $revision, \count($revisions), $revisions[0]['at'], $entry['at']);
+        return new StoredObject(self::snapshot($entry['object']), $revision, \count($revisions), $revisions[0]['at'], $entry['at']);
     }
 }

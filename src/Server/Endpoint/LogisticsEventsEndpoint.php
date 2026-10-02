@@ -121,13 +121,18 @@ final class LogisticsEventsEndpoint extends AbstractEndpoint
         }
     }
 
-    /**
-     * The event must say which object it is for (if it says anything) and use
-     * properties LogisticsEvent accepts.
-     */
     private function validate(LogisticsEvent $event, Iri $object): void
     {
-        $vocabulary = $this->services->vocabulary;
+        self::validateEvent($this->services->vocabulary, $event, $object);
+    }
+
+    /**
+     * The event must be a LogisticsEvent, say which object it is for (if it says
+     * anything) and use properties LogisticsEvent accepts. Shared with the bulk
+     * endpoint so both routes accept exactly the same events (AR-014).
+     */
+    public static function validateEvent(\LambdaTwelve\OneRecord\Vocabulary\Vocabulary $vocabulary, LogisticsEvent $event, Iri $object): void
+    {
         $types = $event->types();
         $isEvent = static fn(string $type): bool => $type === Cargo::LogisticsEvent || $vocabulary->isSubclassOf($type, Cargo::LogisticsEvent);
         if (array_filter($types, $isEvent) === []) {

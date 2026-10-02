@@ -33,7 +33,11 @@ final class JwksKeyResolver implements KeyResolver
         private readonly ?CacheInterface $cache = null,
         private readonly int $ttlSeconds = 3600,
         private readonly LoggerInterface $logger = new NullLogger(),
+        private readonly int $refreshCooldownSeconds = 60,
     ) {}
+
+    /** @var array<string, float> issuer => when an unknown key id last forced a refresh */
+    private array $refreshedAt = [];
 
     public function publicKeys(string $issuer, ?string $keyId): array
     {
@@ -42,7 +46,13 @@ final class JwksKeyResolver implements KeyResolver
         }
         $keys = $this->load($issuer, refresh: false);
         if ($keyId !== null && !isset($keys[$keyId])) {
-            $keys = $this->load($issuer, refresh: true);
+            // Rotation needs one refresh; a stream of forged key ids must not become a stream of
+            // fetches against the issuer (AR-025). One refresh per issuer per cooldown.
+            $now = microtime(true);
+            if (!isset($this->refreshedAt[$issuer]) || $now - $this->refreshedAt[$issuer] >= $this->refreshCooldownSeconds) {
+                $this->refreshedAt[$issuer] = $now;
+                $keys = $this->load($issuer, refresh: true);
+            }
         }
         if ($keyId !== null && isset($keys[$keyId])) {
             return [$keys[$keyId]];

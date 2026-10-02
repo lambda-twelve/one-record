@@ -140,8 +140,24 @@ final class OneRecordClient
                 // A cache problem only costs a request.
             }
         }
-        // Server information is fetched before a version is negotiated: ask for the highest we speak.
-        $response = $this->send('GET', $this->endpoint . '/', null, $this->ourVersions[0]);
+        // Server information is fetched before a version is negotiated. A strict partner answers 406
+        // to a version it does not speak, so ask for each of ours in turn, highest first (AR-005).
+        $response = null;
+        $refused = null;
+        foreach ($this->ourVersions as $candidate) {
+            try {
+                $response = $this->send('GET', $this->endpoint . '/', null, $candidate);
+                break;
+            } catch (OneRecordHttpException $e) {
+                if ($e->status !== 406) {
+                    throw $e;
+                }
+                $refused = $e;
+            }
+        }
+        if ($response === null) {
+            throw new ClientException(\sprintf('%s accepts none of the API versions this client speaks (%s).', $this->endpoint, implode(', ', array_map(static fn(ApiVersion $v): string => $v->value, $this->ourVersions))), 0, $refused);
+        }
         $information = $this->parse(static fn(): ServerInformation => ServerInformation::fromJsonLd(self::body($response)), 'server information');
         if ($this->cache !== null) {
             try {
@@ -189,11 +205,21 @@ final class OneRecordClient
         if ($embedded) {
             $query['embedded'] = 'true';
         }
-        $response = $this->send('GET', $iri->value . ($query === [] ? '' : '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986)));
-        $object = $this->parse(static function () use ($response, $iri): LogisticsObject {
+        $url = $iri->value . ($query === [] ? '' : '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986));
+        $response = $this->send('GET', $url);
+        $object = $this->parse(static function () use ($response, $iri, $url, $query): LogisticsObject {
+            // The body must be about the object asked for. A historical read may be rooted at
+            // the "<iri>?at=…" URL instead; nothing else is accepted (AR-017).
             $document = JsonLd::expand(self::body($response), $iri);
-            // A historical read is rooted at "<iri>?at=…"; otherwise the root is the object asked for.
-            return LogisticsObject::fromJsonLd(self::body($response), $document->root instanceof Iri && $document->root->equals($iri) ? $iri : null);
+            $allowed = [$iri->value];
+            if (isset($query['at'])) {
+                $allowed[] = $url;
+            }
+            if (!$document->root instanceof Iri || !\in_array($document->root->value, $allowed, true)) {
+                throw new ClientException(\sprintf('Asked for %s, the server answered with a document about %s.', $iri->value, $document->root instanceof Iri ? $document->root->value : 'an unidentified node'));
+            }
+
+            return LogisticsObject::fromJsonLd(self::body($response), $document->root);
         }, 'logistics object');
 
         return $this->objectResponse($response, self::withoutRevisionProperties($object));
@@ -394,9 +420,13 @@ final class OneRecordClient
     /**
      * POST /notifications on the partner's server (the partner is the subscriber).
      */
-    public function sendNotification(Notification $notification): void
+    /**
+     * @param ?string $idempotencyKey a stable id for this delivery (OutboundNotification::$id), sent as
+     *                                an Idempotency-Key header so a receiver can drop a retry (AR-024)
+     */
+    public function sendNotification(Notification $notification, ?string $idempotencyKey = null): void
     {
-        $this->send('POST', $this->endpoint . '/notifications', $notification->toJsonLd(), expect: [204, 200]);
+        $this->send('POST', $this->endpoint . '/notifications', $notification->toJsonLd(), expect: [204, 200], headers: $idempotencyKey === null ? [] : ['Idempotency-Key' => $idempotencyKey]);
     }
 
     // --- Action requests ---------------------------------------------------
@@ -427,8 +457,9 @@ final class OneRecordClient
     /**
      * @param ?array<string, mixed> $body
      * @param list<int> $expect acceptable status codes; empty means any 2xx
+     * @param array<string, string> $headers
      */
-    private function send(string $method, string $url, ?array $body = null, ?ApiVersion $version = null, array $expect = []): ResponseInterface
+    private function send(string $method, string $url, ?array $body = null, ?ApiVersion $version = null, array $expect = [], array $headers = []): ResponseInterface
     {
         // The token is this partner's; a resource IRI pointing anywhere else must not carry it (AR-001).
         $origin = self::originOf($url);
@@ -443,6 +474,9 @@ final class OneRecordClient
             $request = $request
                 ->withHeader('Content-Type', self::JSON_LD . '; version=' . $version->value)
                 ->withBody($this->streams->createStream(json_encode($body, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES)));
+        }
+        foreach ($headers as $name => $value) {
+            $request = $request->withHeader($name, $value);
         }
         try {
             $response = $this->http->sendRequest($request);
@@ -477,6 +511,8 @@ final class OneRecordClient
     {
         try {
             return $parse();
+        } catch (ClientException $e) {
+            throw $e;
         } catch (JsonLdException|InvalidDocument|ModelException $e) {
             throw new ClientException(\sprintf('%s answered with a %s this client cannot read: %s', $this->endpoint, $what, $e->getMessage()), 0, $e);
         }
