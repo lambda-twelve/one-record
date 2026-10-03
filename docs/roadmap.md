@@ -14,15 +14,17 @@ Status: :white_check_mark: done, :construction: in progress, :hourglass: planned
 | 6 | Compliance collection (newman) run for API 2.2.0 and 2.3.0 in CI | :white_check_mark: |
 | 7 | Client over PSR-18 with server-information discovery and version selection | :white_check_mark: |
 | 8 | Interoperability suite against NE:ONE as an RDF comparison oracle | :white_check_mark: |
-| 9 | Documentation complete, first release 1.0.0-beta1 | :construction: |
+| 9 | Documentation complete, first release 1.0.0-beta1 | :white_check_mark: |
 
-## What the first tag waits on
+## Where things stand
 
-Phases 0 to 8 are done and the documentation is complete. `1.0.0-beta1` is
-tagged when the maintainer gives the word, after the Laravel and Drupal
-wrappers have run their next round against this state; their first review
-round has been folded in (unit of work, completed store SPIs, the grant
-policy, storage form, shipped contract tests).
+`1.0.0-beta1` was tagged on 2026-10-04, after the Laravel and Drupal wrappers
+had run against this state, their first review round had been folded in (unit
+of work, completed store SPIs, the grant policy, storage form, shipped contract
+tests) and five independent adversarial review rounds had found nothing above
+LOW left open. What follows the beta: real use by the wrappers and by
+partners, which may still change the public API before 1.0.0, and the
+post-1.0 items below.
 
 ## Release numbering
 

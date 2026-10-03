@@ -7,9 +7,11 @@ side (a data holder publishing logistics objects to partners) and the
 Composer package with no framework dependency.
 
 !!! info "Release status"
-    Feature complete for API 2.2.0 and 2.3.0 and heading for a first release
-    tagged `1.0.0-beta1`. Not on Packagist yet; install from Git. The
-    [roadmap](roadmap.md) shows what is done and what the tag waits on.
+    `1.0.0-beta1` is the first release: API 2.2.0 and 2.3.0 served and
+    consumed, compliance and NE:ONE interoperability green. Not on Packagist
+    yet; install from Git. Public API changes are still allowed between betas
+    and recorded in the [changelog](changelog.md); the [roadmap](roadmap.md)
+    shows what is done and what comes next.
 
 ## Who it is for
 

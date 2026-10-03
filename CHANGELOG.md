@@ -12,6 +12,16 @@ it. From 1.0.0 on, breaking changes need a new major version.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [1.0.0-beta1] - 2026-10-04
+
+First release: the server and the client for API 2.2.0 and 2.3.0 with data
+model 3.2 and 3.3, the compliance collection green for both editions, the
+NE:ONE interoperability suite green, and five independent adversarial review
+rounds folded in. Public API changes remain possible between betas and are
+recorded here.
+
 ### Added
 
 - Repository skeleton: Composer package, PHPUnit 11, PHPStan (level max) with an
@@ -152,6 +162,11 @@ it. From 1.0.0 on, breaking changes need a new major version.
   use prefixes only and the reader resolves definitions through other terms,
   so a datatype alias round-trips instead of failing or changing the
   datatype; the JWKS rotation test checks the rotated key itself.
+- Fifth adversarial round (2026-10-04): a term spelled as a compact IRI of a
+  defined prefix, or as an absolute IRI, cannot be redefined to mean another
+  IRI (JSON-LD's invalid IRI mapping); a definition that only repeats the
+  prefix mapping is left out of a written `@context` instead of appearing as
+  an empty array.
 - `Server\Spi\Authenticator` and `Server\Spi\Agent`.
 - Interoperability suite (`tests/Interop/`): NE:ONE built from source at a
   pinned commit as a comparison oracle; the same graph published to both

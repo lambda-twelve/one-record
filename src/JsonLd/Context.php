@@ -97,8 +97,20 @@ final readonly class Context
         $resolvedTerms = [];
         $resolving = [];
         foreach ($terms as $term => $definition) {
+            $id = self::resolveDefinitionIri($definition['id'], $term, $terms, $context, $path . '.' . $term, $resolving);
+            // A term spelled as a compact IRI of a defined prefix, or as an absolute IRI, already means
+            // that IRI; a definition saying otherwise is the inconsistency JSON-LD 1.1 calls an invalid
+            // IRI mapping (create term definition, step 14.2.4). Accepting it would let a writer's
+            // prefix-only output be read back as something else (R5-001).
+            $colon = strpos($term, ':');
+            if ($colon !== false && (isset($prefixes[substr($term, 0, $colon)]) || self::isAbsoluteIri($term))) {
+                $alreadyMeans = $context->expandIri($term, $path . '.' . $term, vocabRelative: true);
+                if ($alreadyMeans !== $id) {
+                    throw JsonLdException::at($path . '.' . $term, \sprintf('"%s" already denotes %s and cannot be redefined as %s', $term, $alreadyMeans, $id));
+                }
+            }
             $resolvedTerms[$term] = [
-                'id' => self::resolveDefinitionIri($definition['id'], $term, $terms, $context, $path . '.' . $term, $resolving),
+                'id' => $id,
                 'type' => $definition['type'] === null || $definition['type'] === self::JSON_LD_ID
                     ? $definition['type']
                     : self::resolveDefinitionIri($definition['type'], $term, $terms, $context, $path . '.' . $term . '.@type', $resolving),
@@ -381,6 +393,11 @@ final readonly class Context
             // A term whose name is already its compact IRI needs no @id (IATA writes {"api:p": {"@type": "xsd:anyURI"}}).
             if ($entry['@id'] === $term) {
                 unset($entry['@id']);
+            }
+            if ($entry === []) {
+                // Nothing left to say: the prefix already gives the term this meaning, and an empty
+                // definition would serialise as [] which no reader accepts (R5-002).
+                continue;
             }
             $raw[$term] = $entry;
         }

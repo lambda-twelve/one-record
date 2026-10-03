@@ -287,4 +287,49 @@ final class WriterTest extends TestCase
         $this->expectException(\LambdaTwelve\OneRecord\JsonLd\JsonLdException::class);
         Context::fromRaw(['a' => ['@id' => 'b'], 'b' => ['@id' => 'a']]);
     }
+
+    public function testR5001ATermThatAlreadyMeansSomethingCannotBeRedefined(): void
+    {
+        $xsd = 'http://www.w3.org/2001/XMLSchema#';
+        $cargo = 'https://onerecord.iata.org/ns/cargo#';
+        $bad = ['xsd:string' => ['@id' => $xsd . 'decimal']];
+        $name = ['name' => ['@id' => $cargo . 'goodsDescription', '@type' => $xsd . 'string']];
+        foreach ([
+            'before, no @vocab' => ['cargo' => $cargo, 'xsd' => $xsd] + $bad + $name,
+            'after, no @vocab' => ['cargo' => $cargo, 'xsd' => $xsd] + $name + $bad,
+            'with @vocab' => ['@vocab' => $cargo, 'cargo' => $cargo, 'xsd' => $xsd] + $bad + $name,
+            'absolute IRI redefined' => ['cargo' => $cargo, $xsd . 'string' => ['@id' => $xsd . 'decimal']] + $name,
+        ] as $label => $context) {
+            try {
+                JsonLd::expand(['@context' => $context, '@id' => 'https://example/p', 'name' => 'Books']);
+                self::fail($label . ': an inconsistent definition must be refused');
+            } catch (\LambdaTwelve\OneRecord\JsonLd\JsonLdException $e) {
+                self::assertStringContainsString('already denotes', $e->getMessage(), $label);
+            }
+        }
+
+        // Consistent compact-IRI definitions stay legal: the same meaning, with or without a coercion.
+        $doc = JsonLd::expand(['@context' => ['cargo' => $cargo, 'xsd' => $xsd, 'xsd:string' => ['@id' => 'xsd:string'], 'cargo:goodsDescription' => ['@type' => 'xsd:string']], '@id' => 'https://example/p', 'cargo:goodsDescription' => 'Books']);
+        $literal = $doc->graph->firstObject(new Iri('https://example/p'), $cargo . 'goodsDescription');
+        self::assertInstanceOf(Literal::class, $literal);
+        self::assertSame($xsd . 'string', $literal->datatype);
+    }
+
+    public function testR5002ARedundantCompactIriDefinitionIsNotWrittenAsAnEmptyArray(): void
+    {
+        $cargo = 'https://onerecord.iata.org/ns/cargo#';
+        $doc = JsonLd::expand(['@context' => ['cargo' => $cargo, 'cargo:goodsDescription' => ['@id' => 'cargo:goodsDescription']], '@id' => 'https://example/p', 'cargo:goodsDescription' => 'Books']);
+        $written = (new Writer())->write($doc->graph, $doc->root, $doc->context);
+        self::assertStringNotContainsString('[]', Json::encode($written, false));
+        $again = JsonLd::expand(Json::encode($written, false))->graph->firstObject(new Iri('https://example/p'), $cargo . 'goodsDescription');
+        self::assertInstanceOf(Literal::class, $again);
+        self::assertSame('Books', $again->lexical);
+
+        // A compact-IRI definition that carries a coercion keeps it, still without a redundant @id.
+        $doc = JsonLd::expand(['@context' => ['api' => 'https://onerecord.iata.org/ns/api#', 'xsd' => 'http://www.w3.org/2001/XMLSchema#', 'api:p' => ['@type' => 'xsd:anyURI']], '@id' => 'https://example/p', 'api:p' => 'https://example/x']);
+        $written = (new Writer())->write($doc->graph, $doc->root, $doc->context);
+        $context = $written['@context'] ?? null;
+        self::assertIsArray($context);
+        self::assertSame(['@type' => 'xsd:anyURI'], $context['api:p'] ?? null);
+    }
 }
