@@ -53,8 +53,10 @@ final class Fanout
         if (!$request->notifyRequestStatusChange()) {
             return;
         }
+        // api:hasLogisticsObject is at most one; a delegation over several objects names none of them
+        // rather than an arbitrary first one, and the request in isTriggeredBy lists them all (spec question 32).
         $objects = $request->logisticsObjects();
-        $object = $objects[0] ?? null;
+        $object = \count($objects) === 1 ? $objects[0] : null;
         $type = null;
         if ($object !== null) {
             $stored = $this->services->objects->latest($object);

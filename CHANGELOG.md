@@ -12,7 +12,15 @@ it. From 1.0.0 on, breaking changes need a new major version.
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- A status-change notification for an action request over several logistics
+  objects (an access delegation, typically) no longer names an arbitrary first
+  object in `api:hasLogisticsObject`, whose cardinality is at most one; it
+  names none and the request in `api:isTriggeredBy` lists them all (spec
+  question 32, IATA-Cargo/ONE-Record#437). Type subscriptions keep matching
+  declared `@type` values only, now recorded as spec question 31
+  (IATA-Cargo/ONE-Record#412).
 
 ## [1.0.0-beta1] - 2026-10-04
 

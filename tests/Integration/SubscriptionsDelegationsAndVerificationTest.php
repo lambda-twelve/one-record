@@ -13,6 +13,7 @@ use LambdaTwelve\OneRecord\Api\SubscriptionEventType;
 use LambdaTwelve\OneRecord\Api\TopicType;
 use LambdaTwelve\OneRecord\Model\Builder\ObjectBuilder;
 use LambdaTwelve\OneRecord\Rdf\Iri;
+use LambdaTwelve\OneRecord\Server\ActionRequests;
 use LambdaTwelve\OneRecord\Server\DataHolder;
 use LambdaTwelve\OneRecord\Server\Spi\Decision;
 use LambdaTwelve\OneRecord\Vocabulary\Generated\Api;
@@ -348,5 +349,28 @@ final class SubscriptionsDelegationsAndVerificationTest extends ServerTestCase
 
         $this->server = $this->makeServer();
         self::assertError($this->post('/logistics-events', $body), 404);
+    }
+
+    public function testAStatusNotificationNamesTheObjectOnlyWhenTheRequestConcernsExactlyOne(): void
+    {
+        $one = $this->storePiece('piece-1', null);
+        $two = $this->storePiece('piece-2', null);
+        $requests = new ActionRequests($this->server->services);
+        $this->server->outbox->drain();
+
+        $requests->create(new AccessDelegation([Permission::GetLogisticsObject], [new Iri(self::STRANGER)], [$one->iri], notifyRequestStatusChange: true), new Iri(self::PARTNER));
+        $single = $this->server->outbox->drain();
+        self::assertCount(1, $single);
+        self::assertSame($one->iri->value, $single[0]->notification->logisticsObject?->value);
+        self::assertSame(Cargo::Piece, $single[0]->notification->logisticsObjectType);
+
+        // Two objects: api:hasLogisticsObject allows one at most, so none is named and isTriggeredBy carries the request (spec question 32).
+        $request = $requests->create(new AccessDelegation([Permission::GetLogisticsObject], [new Iri(self::STRANGER)], [$one->iri, $two->iri], notifyRequestStatusChange: true), new Iri(self::PARTNER));
+        $several = $this->server->outbox->drain();
+        self::assertCount(1, $several);
+        self::assertNull($several[0]->notification->logisticsObject);
+        self::assertNull($several[0]->notification->logisticsObjectType);
+        self::assertSame($request->iri->value, $several[0]->notification->triggeredBy?->value);
+        self::assertArrayNotHasKey('api:hasLogisticsObject', $several[0]->notification->toJsonLd());
     }
 }
