@@ -2,10 +2,17 @@ name: Docs
 
 # Builds the documentation site and publishes it to GitHub Pages, together
 # with the test coverage report and the coverage badge data the README reads.
+# Documentation changes run only this workflow (ci.yml skips them), so the
+# strict build here is also the check for pull requests that touch the docs.
 
 on:
   push:
     branches: [main]
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - '**.md'
   workflow_dispatch:
 
 permissions:
@@ -47,6 +54,8 @@ jobs:
           path: site
 
   deploy:
+    # Pull requests only check the build; the site is published from main.
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     environment:

@@ -5,10 +5,23 @@ name: Architecture
 # package, PSR interfaces and PHP), and a runtime dependency set made of
 # PSR interfaces only.
 
+# Documentation-only changes do not run static analysis (see ci.yml).
 on:
   push:
     branches: [main]
+    paths:
+      - '**'
+      - '!docs/**'
+      - 'docs/examples/**'
+      - '!mkdocs.yml'
+      - '!**.md'
   pull_request:
+    paths:
+      - '**'
+      - '!docs/**'
+      - 'docs/examples/**'
+      - '!mkdocs.yml'
+      - '!**.md'
 
 permissions:
   contents: read

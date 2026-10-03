@@ -1,9 +1,24 @@
 name: CI
 
+# Documentation-only changes (docs/, mkdocs.yml, Markdown files) do not run
+# these gates; docs.yml builds and checks the site for them. docs/examples
+# is code compiled by tests/Docs, so it stays in.
 on:
   push:
     branches: [main]
+    paths:
+      - '**'
+      - '!docs/**'
+      - 'docs/examples/**'
+      - '!mkdocs.yml'
+      - '!**.md'
   pull_request:
+    paths:
+      - '**'
+      - '!docs/**'
+      - 'docs/examples/**'
+      - '!mkdocs.yml'
+      - '!**.md'
   workflow_dispatch:
 
 permissions:
@@ -124,14 +139,3 @@ jobs:
       - uses: ramsey/composer-install@v3
       - run: php bin/generate-vocabulary
       - run: git diff --exit-code --stat -- src/Vocabulary/Generated
-
-  docs:
-    name: Documentation site builds
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install mkdocs-material
-      - run: mkdocs build --strict
