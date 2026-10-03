@@ -93,3 +93,12 @@ how the regressions arrived. And where a correct answer needs a search, the
 search is exhaustive under a budget and the budget's exhaustion is an error
 the caller sees (`ComparisonBudgetExceeded`), never a silent fallback to a
 heuristic.
+
+The third round found the second's shared-node fix had only covered
+introduction and whole-subtree removal, and that the writer's alias fallback
+could still be shadowed by a `@vocab` term. The lesson generalises: an
+invariant about a graph (one node however many links, a key means what it
+expands to) is decided on the whole graph, not inside the recursion that
+happens to meet one link or one key. Graph-wide decisions now live in one
+place each: `ChangeBuilder::deleteUnreachable()` for what a change removes,
+`Context::keyCandidates()` for what a key may be.

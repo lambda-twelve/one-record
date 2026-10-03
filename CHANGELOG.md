@@ -134,6 +134,15 @@ it. From 1.0.0 on, breaking changes need a new major version.
   network-path references; the JWKS refresh cooldown kept in the shared
   cache; a shared embedded node introduced once in a change; a store's status
   conflict answers 409.
+- Third adversarial round (2026-10-03): the change builder plans deletions
+  over the whole before/after graphs, so a shared embedded node is edited
+  once, keeps its triples while any link reaches it, and loses them once when
+  none does; a node under several root properties reports every one of them
+  as changed; every compact key the writer emits must read back as its IRI,
+  so shadowed `@vocab` names and wrong coercions are skipped instead of
+  dropping a predicate or turning a string into an IRI; the client names both
+  identities it accepts before a flattened answer's root is chosen; in-memory
+  outbox reads hand out copies and the outbox contract states ownership.
 - `Server\Spi\Authenticator` and `Server\Spi\Agent`.
 - Interoperability suite (`tests/Interop/`): NE:ONE built from source at a
   pinned commit as a comparison oracle; the same graph published to both
