@@ -6,15 +6,17 @@
 [![Docs](https://github.com/lambda-twelve/one-record/actions/workflows/docs.yml/badge.svg?branch=main)](https://lambda-twelve.github.io/one-record/)
 [![PHP ^8.3](https://img.shields.io/badge/php-%5E8.3-777BB4?logo=php&logoColor=white)](composer.json)
 [![Release](https://img.shields.io/github/v/release/lambda-twelve/one-record?include_prereleases&sort=semver)](https://github.com/lambda-twelve/one-record/releases)
+[![Packagist](https://img.shields.io/packagist/v/lambda-twelve/one-record?include_prereleases)](https://packagist.org/packages/lambda-twelve/one-record)
 
 A framework-agnostic PHP implementation of **IATA ONE Record**: the server side
 (a data holder publishing logistics objects to partners) and the client side
 (talking to other parties' ONE Record servers), as one Composer package.
 
 > **Status:** `1.0.0-beta1` is the first release: API 2.2.0 and 2.3.0 served
-> and consumed, compliance and NE:ONE interoperability green. Not on Packagist
-> yet; install from Git. Public API changes are still allowed between betas and
-> recorded in the [changelog](CHANGELOG.md); the
+> and consumed, compliance and NE:ONE interoperability green. Published on
+> [Packagist](https://packagist.org/packages/lambda-twelve/one-record) as a
+> pre-release. Public API changes are still allowed between betas and recorded
+> in the [changelog](CHANGELOG.md); the
 > [roadmap](https://lambda-twelve.github.io/one-record/roadmap/) has the detail.
 
 ## What it supports
@@ -43,8 +45,12 @@ PSR-3 logger, PSR-16 cache).
 ## Installation
 
 ```sh
-composer require lambda-twelve/one-record
+composer require lambda-twelve/one-record:^1.0@beta
 ```
+
+The `@beta` flag lets Composer pick a pre-release without lowering your
+project's minimum stability for everything else. Once 1.0.0 is out,
+`composer require lambda-twelve/one-record` is enough.
 
 ## Server in five lines
 
