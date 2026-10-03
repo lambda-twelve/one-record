@@ -48,9 +48,9 @@ final class Expander
 
     /**
      * @param array<string, mixed> $document a decoded JSON object
-     * @param ?Iri $preferredRoot the node to treat as the document's subject when the document is a flat @graph
+     * @param Iri|list<Iri>|null $preferredRoot the node(s) to treat as the document's subject when it is a flat @graph, in order of preference
      */
-    public function expand(array $document, ?Iri $preferredRoot = null): ExpandedDocument
+    public function expand(array $document, Iri|array|null $preferredRoot = null): ExpandedDocument
     {
         $this->counter = 0;
         $this->documentBlankNodes = [];
@@ -58,7 +58,7 @@ final class Expander
         $context = Context::fromRaw($document['@context'] ?? null);
         unset($document['@context']);
         if (\array_key_exists('@graph', $document)) {
-            return new ExpandedDocument($graph, $this->flatGraph($document, $context, $graph, $preferredRoot), $context);
+            return new ExpandedDocument($graph, $this->flatGraph($document, $context, $graph, $preferredRoot instanceof Iri ? [$preferredRoot] : ($preferredRoot ?? [])), $context);
         }
         $root = $this->node($document, '', $context, $graph);
 
@@ -69,12 +69,15 @@ final class Expander
      * A top-level @graph is the flattened form of one document: a list of
      * nodes referencing each other by @id (NE:ONE answers this way for any
      * object with embedded nodes). Every node joins the same graph; the root
-     * is the preferred node if present, else the top-level @id, else the one
-     * node nothing else references, else the first.
+     * is the first preferred node present, else the top-level @id, else the one
+     * node nothing else references, else the first. A caller that knows which
+     * identities it would accept names them all up front, so a cyclic graph
+     * cannot make the choice depend on node order (R3-004).
      *
      * @param array<string, mixed> $document
+     * @param list<Iri> $preferredRoots
      */
-    private function flatGraph(array $document, Context $context, Graph $graph, ?Iri $preferredRoot): Iri|BlankNode
+    private function flatGraph(array $document, Context $context, Graph $graph, array $preferredRoots): Iri|BlankNode
     {
         foreach (array_keys($document) as $key) {
             if (!\in_array($key, ['@graph', '@id'], true)) {
@@ -93,8 +96,10 @@ final class Expander
             /** @var array<string, mixed> $node */
             $subjects[] = $this->node($node, '@graph[' . $index . ']', $context, $graph);
         }
-        if ($preferredRoot !== null && $graph->about($preferredRoot) !== []) {
-            return $preferredRoot;
+        foreach ($preferredRoots as $preferred) {
+            if ($graph->about($preferred) !== []) {
+                return $preferred;
+            }
         }
         if (\is_string($document['@id'] ?? null) && $document['@id'] !== '') {
             $named = $this->identifier($document['@id'], '@id', $context);

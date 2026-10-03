@@ -209,13 +209,15 @@ final class OneRecordClient
         $response = $this->send('GET', $url);
         $object = $this->parse(static function () use ($response, $iri, $query): LogisticsObject {
             // The body must be about the object asked for. A historical read may be rooted at
-            // the "<iri>?at=…" URL instead; nothing else is accepted (AR-017).
-            $document = JsonLd::expand(self::body($response), $iri);
+            // the "<iri>?at=…" URL instead; nothing else is accepted (AR-017). Both identities are
+            // named before the root is chosen, so a flattened answer is rooted at one of them wherever
+            // the node sits (R3-004).
             $allowed = [$iri->value];
             if (isset($query['at'])) {
                 // The historical identity carries the instant only; embedded=true is presentation, not identity (R2-003).
                 $allowed[] = $iri->value . '?at=' . $query['at'];
             }
+            $document = JsonLd::expand(self::body($response), array_map(static fn(string $a): Iri => new Iri($a), $allowed));
             if (!$document->root instanceof Iri || !\in_array($document->root->value, $allowed, true)) {
                 throw new ClientException(\sprintf('Asked for %s, the server answered with a document about %s.', $iri->value, $document->root instanceof Iri ? $document->root->value : 'an unidentified node'));
             }

@@ -128,12 +128,12 @@ final class ChangeApplier
      */
     private function changedProperties(Change $change, Iri $root, Graph $before, Graph $after, array $minted): array
     {
-        $rootPropertyOf = [];
+        $rootPropertiesOf = [];
         foreach ([$before, $after] as $graph) {
             foreach ($graph->about($root) as $triple) {
                 $object = $triple->object;
                 if (($object instanceof Iri || $object instanceof BlankNode) && LogisticsObject::isEmbeddedId($object)) {
-                    $this->assignRootProperty($graph, $object, $triple->predicate->value, $rootPropertyOf);
+                    $this->assignRootProperty($graph, $object, $triple->predicate->value, $rootPropertiesOf);
                 }
             }
         }
@@ -145,8 +145,11 @@ final class ChangeApplier
             }
             if ($subject->equals($root)) {
                 $properties[$operation->predicate->value] = true;
-            } elseif (isset($rootPropertyOf[$subject->toNTriples()])) {
-                $properties[$rootPropertyOf[$subject->toNTriples()]] = true;
+            } else {
+                // A node shared under several root properties changes all of them (R3-005).
+                foreach (array_keys($rootPropertiesOf[$subject->toNTriples()] ?? []) as $property) {
+                    $properties[$property] = true;
+                }
             }
         }
         $list = array_keys($properties);
@@ -156,19 +159,20 @@ final class ChangeApplier
     }
 
     /**
-     * @param array<string, string> $rootPropertyOf node => root property IRI
+     * @param array<string, array<string, true>> $rootPropertiesOf node => the root properties it hangs from
      */
-    private function assignRootProperty(Graph $graph, Iri|BlankNode $node, string $property, array &$rootPropertyOf): void
+    private function assignRootProperty(Graph $graph, Iri|BlankNode $node, string $property, array &$rootPropertiesOf): void
     {
         $key = $node->toNTriples();
-        if (isset($rootPropertyOf[$key])) {
+        if (isset($rootPropertiesOf[$key][$property])) {
+            // Visited under this property already: a cycle, or a second path under the same property.
             return;
         }
-        $rootPropertyOf[$key] = $property;
+        $rootPropertiesOf[$key][$property] = true;
         foreach ($graph->about($node) as $triple) {
             $object = $triple->object;
             if (($object instanceof Iri || $object instanceof BlankNode) && LogisticsObject::isEmbeddedId($object)) {
-                $this->assignRootProperty($graph, $object, $property, $rootPropertyOf);
+                $this->assignRootProperty($graph, $object, $property, $rootPropertiesOf);
             }
         }
     }

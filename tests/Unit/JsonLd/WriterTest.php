@@ -216,4 +216,41 @@ final class WriterTest extends TestCase
         self::assertSame('https://onerecord.iata.org/ns/cargo#', $written['@id']);
         self::assertSame('https://onerecord.iata.org/ns/cargo#', JsonLd::expand($written)->rootIri()?->value);
     }
+
+    public function testR3002VocabRelativeKeysAreNotUsedWhenATermShadowsThem(): void
+    {
+        // A: the @vocab-relative name is the same @id-coerced term; a string must not become an IRI through it.
+        $doc = JsonLd::expand(['@context' => ['@vocab' => 'https://onerecord.iata.org/ns/cargo#', 'goodsDescription' => ['@id' => 'https://onerecord.iata.org/ns/cargo#goodsDescription', '@type' => '@id']], '@id' => 'https://example/p', 'https://onerecord.iata.org/ns/cargo#goodsDescription' => 'https://example/text']);
+        $written = (new Writer())->write($doc->graph, $doc->root, $doc->context);
+        $back = JsonLd::expand($written)->graph->firstObject(new Iri('https://example/p'), 'https://onerecord.iata.org/ns/cargo#goodsDescription');
+        self::assertInstanceOf(Literal::class, $back);
+        self::assertSame('https://example/text', $back->lexical);
+        self::assertArrayHasKey('https://onerecord.iata.org/ns/cargo#goodsDescription', $written, 'the only form that reads back as a string');
+
+        // B: a term named like another property's local name must not swallow that property.
+        $doc = JsonLd::expand(['@context' => ['@vocab' => 'https://onerecord.iata.org/ns/cargo#', 'goodsDescription' => 'https://onerecord.iata.org/ns/cargo#coload'], '@id' => 'https://example/p', 'https://onerecord.iata.org/ns/cargo#goodsDescription' => 'Books', 'https://onerecord.iata.org/ns/cargo#coload' => false]);
+        self::assertCount(2, $doc->graph);
+        $written = (new Writer())->write($doc->graph, $doc->root, $doc->context);
+        $again = JsonLd::expand($written)->graph;
+        self::assertCount(2, $again);
+        $description = $again->firstObject(new Iri('https://example/p'), 'https://onerecord.iata.org/ns/cargo#goodsDescription');
+        self::assertInstanceOf(Literal::class, $description);
+        self::assertSame('Books', $description->lexical);
+        self::assertInstanceOf(Literal::class, $again->firstObject(new Iri('https://example/p'), 'https://onerecord.iata.org/ns/cargo#coload'));
+        self::assertFalse($written['goodsDescription'], 'the alias keeps its own meaning');
+
+        // Types go through the same check: a shadowed local name is not used for a class.
+        $doc = JsonLd::expand(['@context' => ['cargo' => 'https://onerecord.iata.org/ns/cargo#', '@vocab' => 'https://onerecord.iata.org/ns/cargo#', 'Piece' => 'https://onerecord.iata.org/ns/cargo#Shipment'], '@id' => 'https://example/p', '@type' => 'cargo:Piece']);
+        $written = (new Writer())->write($doc->graph, $doc->root, $doc->context);
+        self::assertSame('cargo:Piece', $written['@type']);
+        self::assertSame(['https://onerecord.iata.org/ns/cargo#Piece'], array_map(static fn(Iri $t): string => $t->value, JsonLd::expand($written)->graph->typesOf(new Iri('https://example/p'))));
+
+        // Term definition order does not matter.
+        foreach ([['a' => ['@id' => 'https://onerecord.iata.org/ns/cargo#goodsDescription', '@type' => '@id'], 'cargo' => 'https://onerecord.iata.org/ns/cargo#'], ['cargo' => 'https://onerecord.iata.org/ns/cargo#', 'a' => ['@id' => 'https://onerecord.iata.org/ns/cargo#goodsDescription', '@type' => '@id']]] as $context) {
+            $doc = JsonLd::expand(['@context' => $context, '@id' => 'https://example/p', 'cargo:goodsDescription' => ['Books', ['@id' => 'https://example/ref']]]);
+            $written = (new Writer())->write($doc->graph, $doc->root, $doc->context);
+            self::assertArrayHasKey('cargo:goodsDescription', $written, 'mixed literal and IRI values cannot use the @id alias');
+            self::assertCount(2, JsonLd::expand($written)->graph->objects(new Iri('https://example/p'), 'https://onerecord.iata.org/ns/cargo#goodsDescription'));
+        }
+    }
 }

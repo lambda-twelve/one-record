@@ -337,4 +337,35 @@ final class OneRecordClientTest extends TestCase
         ]], headers: ['Revision' => '1', 'Latest-Revision' => '1']));
         self::assertSame(self::PARTNER . '/logistics-objects/p', $client->getLogisticsObject(self::PARTNER . '/logistics-objects/p')->object?->iri->value);
     }
+
+    public function testR3004AFlattenedHistoricalAnswerIsRootedAtTheRequestedNodeWhateverTheOrder(): void
+    {
+        $this->http->queue($this->serverInformation([ApiVersion::V2_3_0]));
+        $client = $this->client();
+        $p = self::PARTNER . '/logistics-objects/p?at=20261002T120000Z';
+        $child = self::PARTNER . '/logistics-objects/child?at=20261002T120000Z';
+        $pNode = ['@id' => $p, '@type' => 'cargo:Piece', 'cargo:containedPieces' => ['@id' => $child]];
+        $childNode = ['@id' => $child, '@type' => 'cargo:Piece', 'cargo:inPiece' => ['@id' => $p]];
+        $context = ['cargo' => 'https://onerecord.iata.org/ns/cargo#'];
+
+        foreach ([[$childNode, $pNode], [$pNode, $childNode]] as $nodes) {
+            $this->http->queue($this->jsonLd(200, ['@context' => $context, '@graph' => $nodes], headers: ['Revision' => '1', 'Latest-Revision' => '2']));
+            $read = $client->getLogisticsObject(self::PARTNER . '/logistics-objects/p', at: new DateTimeImmutable('2026-10-02T12:00:00Z'), embedded: true);
+            self::assertSame($p, $read->object?->iri->value);
+            self::assertSame(1, $read->revision);
+        }
+
+        // Control: a flattened cyclic answer about other objects is still refused.
+        $other = self::PARTNER . '/logistics-objects/other?at=20261002T120000Z';
+        $this->http->queue($this->jsonLd(200, ['@context' => $context, '@graph' => [
+            ['@id' => $child, '@type' => 'cargo:Piece', 'cargo:inPiece' => ['@id' => $other]],
+            ['@id' => $other, '@type' => 'cargo:Piece', 'cargo:containedPieces' => ['@id' => $child]],
+        ]], headers: ['Revision' => '1', 'Latest-Revision' => '2']));
+        try {
+            $client->getLogisticsObject(self::PARTNER . '/logistics-objects/p', at: new DateTimeImmutable('2026-10-02T12:00:00Z'), embedded: true);
+            self::fail('an answer about other objects');
+        } catch (ClientException $e) {
+            self::assertStringContainsString('answered with a document about', $e->getMessage());
+        }
+    }
 }

@@ -26,7 +26,8 @@ final class InMemoryNotificationOutbox implements NotificationOutbox
      */
     public function all(): array
     {
-        return $this->queue;
+        // What is read is a copy: editing it must not change what will be delivered (R3-003).
+        return array_map(self::snapshot(...), $this->queue);
     }
 
     /**

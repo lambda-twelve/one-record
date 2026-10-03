@@ -86,9 +86,13 @@ blank nodes, because servers mint their own embedded-object ids; pass
 `blankNodePrefixes: ['internal:', 'neone:']` to compare with NE:ONE. Numeric
 literals are compared by value (`20.0`, `"20.0"^^xsd:double` and `2.0E1` are
 the same) unless `normaliseNumbers: false`; `ignoreLanguageTags: true` treats
-`"x"` and `"x"@en-US` as equal. Blank nodes are labelled by iterated hashing
-of their neighbourhood; nodes the hashing cannot separate are structurally
-identical in ONE Record's tree-shaped documents and receive ordinal labels.
+`"x"` and `"x"@en-US` as equal. Blank nodes get canonical labels by colour
+refinement followed by an exhaustive individualisation search, so the labels
+depend on structure alone; the search is bounded and a graph too symmetric to
+canonicalise within the budget raises `JsonLd\ComparisonBudgetExceeded` rather
+than a guess. ONE Record documents are far from that bound; `ChangeBuilder`
+uses the comparer to match embedded objects, so the exception can surface from
+`diff()` too.
 
 ## Conformance against IATA's examples
 

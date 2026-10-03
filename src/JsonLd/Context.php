@@ -264,27 +264,71 @@ final readonly class Context
      * used; otherwise "Piece" would be written where a reader sees a relative
      * reference (AR-007).
      */
-    public function compactIri(string $iri, bool $vocabRelative = true, bool $useTerms = true): string
+    /**
+     * The shortest form of an IRI that this context reads back as that IRI.
+     * In vocabulary position (keys and types) that is the first of
+     * keyCandidates(); as a node identifier only compact IRIs and the IRI
+     * itself qualify, since a bare term or prefix name would read as a
+     * relative IRI (R2-002).
+     */
+    public function compactIri(string $iri, bool $vocabRelative = true): string
     {
-        if ($vocabRelative && $useTerms) {
-            foreach ($this->terms as $term => $definition) {
-                if ($definition['id'] === $iri) {
-                    return $term;
-                }
+        if ($vocabRelative) {
+            return $this->keyCandidates($iri)[0];
+        }
+        $compact = $this->compactWithPrefix($iri);
+        if ($compact !== null && $this->readsBackAs($compact, $iri, false)) {
+            return $compact;
+        }
+
+        return $iri;
+    }
+
+    /**
+     * Every way to write a property or type IRI in this context that expands
+     * back to exactly that IRI, shortest first: term aliases, the bare prefix
+     * name for a namespace IRI, the @vocab-relative name, the compact IRI, the
+     * IRI itself. A candidate shadowed by a term definition for something else
+     * is left out, because it would read back as that something else (R3-002).
+     *
+     * @return non-empty-list<string>
+     */
+    public function keyCandidates(string $iri): array
+    {
+        $candidates = [];
+        $aliases = [];
+        foreach ($this->terms as $term => $definition) {
+            if ($definition['id'] === $iri) {
+                $aliases[] = (string) $term;
             }
         }
-        // A bare prefix name is a term alias for the namespace, usable for keys and types only;
-        // as a node identifier it would read as a relative IRI (R2-002).
+        sort($aliases, SORT_STRING);
+        array_push($candidates, ...$aliases);
         $exact = array_search($iri, $this->prefixes, true);
-        if ($vocabRelative && $exact !== false && $exact !== '') {
-            return $exact;
+        if ($exact !== false && $exact !== '') {
+            $candidates[] = (string) $exact;
         }
-        if ($vocabRelative && $this->vocab !== null && str_starts_with($iri, $this->vocab)) {
+        if ($this->vocab !== null && str_starts_with($iri, $this->vocab)) {
             $local = substr($iri, \strlen($this->vocab));
             if ($local !== '' && !str_contains($local, ':') && !str_contains($local, '/') && !str_contains($local, '#')) {
-                return $local;
+                $candidates[] = $local;
             }
         }
+        $compact = $this->compactWithPrefix($iri);
+        if ($compact !== null) {
+            $candidates[] = $compact;
+        }
+        $candidates[] = $iri;
+        $valid = array_values(array_filter(array_unique($candidates), fn(string $c): bool => $this->readsBackAs($c, $iri, true)));
+        if ($valid === []) {
+            throw JsonLdException::at('', \sprintf('"%s" cannot be written in this context: every form of it reads back as something else.', $iri));
+        }
+
+        return $valid;
+    }
+
+    private function compactWithPrefix(string $iri): ?string
+    {
         $best = null;
         $bestLength = 0;
         foreach ($this->prefixes as $prefix => $namespace) {
@@ -294,7 +338,16 @@ final readonly class Context
             }
         }
 
-        return $best ?? $iri;
+        return $best;
+    }
+
+    private function readsBackAs(string $candidate, string $iri, bool $vocabRelative): bool
+    {
+        try {
+            return $this->expandIri($candidate, '', $vocabRelative) === $iri;
+        } catch (JsonLdException) {
+            return false;
+        }
     }
 
     /**

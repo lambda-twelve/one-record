@@ -26,8 +26,11 @@ use LogicException;
  * Plain values and references become DELETE/ADD pairs. Embedded objects are
  * matched by content: an unchanged one produces nothing; a changed one is
  * edited in place through its embedded id when the slot holds exactly one
- * old and one new object (spec example C3), otherwise the old object is
- * deleted with its triples (C4) and the new one added as a blank node (C2).
+ * old and one new object (spec example C3), otherwise the link is deleted
+ * and the new object added as a blank node (C2). An embedded node is one
+ * node however many links reach it: it is edited or introduced once, and
+ * its own triples are deleted only when no link to it survives (C4), decided
+ * on the whole before/after graphs rather than per link (R2-011, R3-001).
  * Logistics events are never part of a change; the spec forbids it.
  */
 final class ChangeBuilder
@@ -39,8 +42,11 @@ final class ChangeBuilder
     /** @var array<string, BlankNode> source embedded node => the blank node the change introduces for it */
     private array $introduced = [];
 
-    /** @var array<string, true> source embedded nodes whose subtree deletion was already emitted */
-    private array $removed = [];
+    /** @var array<string, string> source embedded node edited in place => the target node it was made to match */
+    private array $edited = [];
+
+    /** @var array<string, Iri> target embedded node => the source node that already represents it */
+    private array $pairedTo = [];
 
     public function __construct(
         private readonly ?Vocabulary $vocabulary = null,
@@ -66,9 +72,11 @@ final class ChangeBuilder
 
         $this->blankCounter = 0;
         $this->introduced = [];
-        $this->removed = [];
+        $this->edited = [];
+        $this->pairedTo = [];
         $this->root = $from->iri;
         $operations = $this->diffNode($from->graph, $to->graph, $from->iri, $to->iri, $from->iri);
+        $operations = [...$operations, ...$this->deleteUnreachable($from->graph, $from->iri, $operations)];
         if ($operations === []) {
             return null;
         }
@@ -128,11 +136,30 @@ final class ChangeBuilder
 
             if (\count($unmatchedOld) === 1 && \count($unmatchedNew) === 1 && $unmatchedOld[0] instanceof Iri
                 && $this->sameTypes($fromGraph, $unmatchedOld[0], $toGraph, $unmatchedNew[0])) {
-                $operations = [...$operations, ...$this->diffNode($fromGraph, $toGraph, $unmatchedOld[0], $unmatchedNew[0], $unmatchedOld[0])];
+                [$old, $new] = [$unmatchedOld[0], $unmatchedNew[0]];
+                $oldKey = $old->toNTriples();
+                $newKey = $new->toNTriples();
+                if (isset($this->edited[$oldKey])) {
+                    if ($this->edited[$oldKey] === $newKey) {
+                        // The same edit seen through another link: already emitted (R3-001).
+                        continue;
+                    }
+                    // The old node was already made into something else; this link needs its own new node.
+                    $operations = [...$operations, ...$this->deleteLink($fromGraph, $subject, $predicate, $old), ...$this->addSubtree($toGraph, $subject, $predicate, $new)];
+                    continue;
+                }
+                if (isset($this->pairedTo[$newKey])) {
+                    // The new node already exists as another old node edited to match: share it instead of cloning it.
+                    $operations = [...$operations, ...$this->deleteLink($fromGraph, $subject, $predicate, $old), $this->link($toGraph, $subject, $predicate, $new, $this->pairedTo[$newKey])];
+                    continue;
+                }
+                $this->edited[$oldKey] = $newKey;
+                $this->pairedTo[$newKey] = $old;
+                $operations = [...$operations, ...$this->diffNode($fromGraph, $toGraph, $old, $new, $old)];
                 continue;
             }
             foreach ($unmatchedOld as $node) {
-                $operations = [...$operations, ...$this->deleteSubtree($fromGraph, $subject, $predicate, $node)];
+                $operations = [...$operations, ...$this->deleteLink($fromGraph, $subject, $predicate, $node)];
             }
             foreach ($unmatchedNew as $node) {
                 $operations = [...$operations, ...$this->addSubtree($toGraph, $subject, $predicate, $node)];
@@ -257,32 +284,86 @@ final class ChangeBuilder
     }
 
     /**
-     * Delete the link and every triple of the embedded object (spec example C4).
+     * Delete one link to an embedded node. Whether the node's own triples go
+     * too is decided afterwards by deleteUnreachable().
      *
      * @return list<Operation>
      */
-    private function deleteSubtree(Graph $graph, Iri|BlankNode $subject, Iri $predicate, Iri|BlankNode $node): array
+    private function deleteLink(Graph $graph, Iri|BlankNode $subject, Iri $predicate, Iri|BlankNode $node): array
     {
-        $operations = [Operation::delete($subject, $predicate, new OperationObject($this->datatypeForNode($graph, $predicate, $node), $node instanceof Iri ? $node->value : $node->toNTriples()))];
-        // The link goes each time; the node's own triples go once (R2-011).
-        $key = $node->toNTriples();
-        if (isset($this->removed[$key])) {
-            return $operations;
+        return [Operation::delete($subject, $predicate, new OperationObject($this->datatypeForNode($graph, $predicate, $node), $node instanceof Iri ? $node->value : $node->toNTriples()))];
+    }
+
+    private function link(Graph $graph, Iri|BlankNode $subject, Iri $predicate, Iri|BlankNode $node, Iri|BlankNode $target): Operation
+    {
+        return Operation::add($subject, $predicate, new OperationObject($this->datatypeForNode($graph, $predicate, $node), $target instanceof Iri ? $target->value : $target->toNTriples()));
+    }
+
+    /**
+     * Spec example C4, decided on the whole graph: once the link deletions are
+     * known, every embedded node of the old graph that no surviving link
+     * reaches loses its own triples, once, however many links used to reach
+     * it. A node still reached from elsewhere keeps them (R3-001).
+     *
+     * @param list<Operation> $operations
+     * @return list<Operation>
+     */
+    private function deleteUnreachable(Graph $from, Iri $root, array $operations): array
+    {
+        $deletedLinks = [];
+        foreach ($operations as $operation) {
+            if ($operation->kind === OperationKind::Delete && !$operation->object->isLiteral()) {
+                $deletedLinks[$operation->subject->toNTriples() . ' ' . $operation->predicate->value . ' ' . $operation->object->value] = true;
+            }
         }
-        $this->removed[$key] = true;
-        foreach ($graph->about($node) as $triple) {
-            if ($triple->predicate->value === Graph::RDF_TYPE) {
+        $surviving = new Graph();
+        foreach ($from as $triple) {
+            $object = $triple->object;
+            if ($object instanceof Iri && isset($deletedLinks[$triple->subject->toNTriples() . ' ' . $triple->predicate->value . ' ' . $object->value])) {
                 continue;
             }
-            $object = $triple->object;
-            if (($object instanceof BlankNode || ($object instanceof Iri && LogisticsObject::isEmbeddedId($object))) && $graph->about($object) !== []) {
-                $operations = [...$operations, ...$this->deleteSubtree($graph, $node, $triple->predicate, $object)];
-            } else {
-                $operations[] = Operation::delete($node, $triple->predicate, $this->plainObject($graph, $triple->predicate, $object));
+            $surviving->add($triple);
+        }
+        $before = $this->reachableEmbedded($from, $root);
+        $after = $this->reachableEmbedded($surviving, $root);
+        $deletes = [];
+        foreach ($before as $key => $node) {
+            if (isset($after[$key])) {
+                continue;
+            }
+            foreach ($surviving->about($node) as $triple) {
+                if ($triple->predicate->value === Graph::RDF_TYPE) {
+                    continue;
+                }
+                $deletes[] = Operation::delete($node, $triple->predicate, $this->plainObject($from, $triple->predicate, $triple->object));
             }
         }
 
-        return $operations;
+        return $deletes;
+    }
+
+    /**
+     * @return array<string, Iri|BlankNode> embedded nodes reachable from the root, by N-Triples key
+     */
+    private function reachableEmbedded(Graph $graph, Iri $root): array
+    {
+        $seen = [$root->toNTriples() => true];
+        $found = [];
+        $queue = [$root];
+        while ($queue !== []) {
+            $node = array_shift($queue);
+            foreach ($graph->about($node) as $triple) {
+                $object = $triple->object;
+                $key = $object->toNTriples();
+                if (($object instanceof BlankNode || ($object instanceof Iri && LogisticsObject::isEmbeddedId($object))) && !isset($seen[$key]) && $graph->about($object) !== []) {
+                    $seen[$key] = true;
+                    $found[$key] = $object;
+                    $queue[] = $object;
+                }
+            }
+        }
+
+        return $found;
     }
 
     /**
@@ -293,9 +374,13 @@ final class ChangeBuilder
     private function addSubtree(Graph $graph, Iri|BlankNode $subject, Iri $predicate, Iri|BlankNode $node): array
     {
         // A node reached through two links is one node (R2-011): introduce it once, link it twice.
+        // When an existing node was already edited to match it, link to that one (R3-001).
         $key = $node->toNTriples();
+        if (isset($this->pairedTo[$key])) {
+            return [$this->link($graph, $subject, $predicate, $node, $this->pairedTo[$key])];
+        }
         if (isset($this->introduced[$key])) {
-            return [Operation::add($subject, $predicate, new OperationObject($this->datatypeForNode($graph, $predicate, $node), $this->introduced[$key]->toNTriples()))];
+            return [$this->link($graph, $subject, $predicate, $node, $this->introduced[$key])];
         }
         $blank = $this->introduced[$key] = new BlankNode('b' . $this->blankCounter++);
         $operations = [Operation::add($subject, $predicate, new OperationObject($this->datatypeForNode($graph, $predicate, $node), $blank->toNTriples()))];

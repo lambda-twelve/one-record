@@ -421,4 +421,160 @@ final class ChangeBuilderAndApplierTest extends TestCase
         self::assertCount(1, $deletesOfValue);
         self::assertTrue((new Comparer())->isomorphic((new ChangeApplier())->apply($result->object, 2, $back)->object->graph, $from->graph));
     }
+
+    /**
+     * piece -dimensions-> d; d -width-> v; d -height-> v; v numericalValue 1.
+     */
+    private function sharedValueGraph(Iri $iri, int $value = 1): Graph
+    {
+        $d = new Iri('internal:d');
+        $v = new Iri('internal:v');
+
+        return new Graph([
+            new Triple($iri, new Iri(Graph::RDF_TYPE), new Iri(Cargo::Piece)),
+            new Triple($iri, new Iri(Cargo::goodsDescription), Literal::string('Books')),
+            new Triple($iri, new Iri(Cargo::dimensions), $d),
+            new Triple($d, new Iri(Graph::RDF_TYPE), new Iri(Cargo::Dimensions)),
+            new Triple($d, new Iri(Cargo::width), $v),
+            new Triple($d, new Iri(Cargo::height), $v),
+            new Triple($v, new Iri(Graph::RDF_TYPE), new Iri(Cargo::Value)),
+            new Triple($v, new Iri(Cargo::numericalValue), Literal::integer($value)),
+        ]);
+    }
+
+    public function testR3001EditingASharedEmbeddedNodeEmitsTheEditOnce(): void
+    {
+        $iri = new Iri('https://1r.example.com/logistics-objects/p1');
+        $from = new LogisticsObject($iri, $this->sharedValueGraph($iri, 1));
+        $to = new LogisticsObject($iri, $this->sharedValueGraph($iri, 2));
+
+        $change = (new ChangeBuilder())->diff($from, $to, 1);
+        self::assertNotNull($change);
+        self::assertCount(2, $change->operations, 'one DELETE and one ADD, not two of each');
+        $result = (new ChangeApplier())->apply($from, 1, $change);
+        self::assertTrue((new Comparer())->isomorphic($result->object->graph, $to->graph));
+        self::assertSame([Cargo::dimensions], $result->changedProperties);
+    }
+
+    public function testR3001UnlinkingOneOfTwoLinksKeepsTheNodeAndItsValue(): void
+    {
+        $iri = new Iri('https://1r.example.com/logistics-objects/p1');
+        $from = new LogisticsObject($iri, $this->sharedValueGraph($iri));
+        $toGraph = $this->sharedValueGraph($iri);
+        $toGraph->remove(new Triple(new Iri('internal:d'), new Iri(Cargo::width), new Iri('internal:v')));
+        $to = new LogisticsObject($iri, $toGraph);
+
+        $change = (new ChangeBuilder())->diff($from, $to, 1);
+        self::assertNotNull($change);
+        self::assertCount(1, $change->operations, 'only the link goes');
+        $result = (new ChangeApplier())->apply($from, 1, $change);
+        self::assertTrue((new Comparer())->isomorphic($result->object->graph, $to->graph));
+        $value = $result->object->graph->firstObject(new Iri('internal:v'), Cargo::numericalValue);
+        self::assertInstanceOf(Literal::class, $value);
+        self::assertSame('1', $value->lexical);
+        $height = $result->object->graph->firstObject(new Iri('internal:d'), Cargo::height);
+        self::assertInstanceOf(Iri::class, $height);
+        self::assertInstanceOf(Literal::class, $result->object->graph->firstObject($height, Cargo::numericalValue), 'the value survives under height');
+    }
+
+    public function testR3001UnlinkingTheLastLinkDeletesTheNodeOnce(): void
+    {
+        $iri = new Iri('https://1r.example.com/logistics-objects/p1');
+        $from = new LogisticsObject($iri, $this->sharedValueGraph($iri));
+        $toGraph = $this->sharedValueGraph($iri);
+        $toGraph->remove(new Triple(new Iri('internal:d'), new Iri(Cargo::width), new Iri('internal:v')));
+        $toGraph->remove(new Triple(new Iri('internal:d'), new Iri(Cargo::height), new Iri('internal:v')));
+        $toGraph->remove(new Triple(new Iri('internal:v'), new Iri(Graph::RDF_TYPE), new Iri(Cargo::Value)));
+        $toGraph->remove(new Triple(new Iri('internal:v'), new Iri(Cargo::numericalValue), Literal::integer(1)));
+        $to = new LogisticsObject($iri, $toGraph);
+
+        $change = (new ChangeBuilder())->diff($from, $to, 1);
+        self::assertNotNull($change);
+        self::assertCount(3, $change->operations, 'two links and one value');
+        $result = (new ChangeApplier())->apply($from, 1, $change);
+        self::assertTrue((new Comparer())->isomorphic($result->object->graph, $to->graph));
+        self::assertSame([], $result->object->graph->about(new Iri('internal:v')));
+    }
+
+    public function testR3001ASharedNodeEditedDifferentlyUnderEachLinkSplits(): void
+    {
+        $iri = new Iri('https://1r.example.com/logistics-objects/p1');
+        $from = new LogisticsObject($iri, $this->sharedValueGraph($iri));
+        $d = new Iri('internal:d');
+        $w = new Iri('internal:w');
+        $h = new Iri('internal:h');
+        $to = new LogisticsObject($iri, new Graph([
+            new Triple($iri, new Iri(Graph::RDF_TYPE), new Iri(Cargo::Piece)),
+            new Triple($iri, new Iri(Cargo::goodsDescription), Literal::string('Books')),
+            new Triple($iri, new Iri(Cargo::dimensions), $d),
+            new Triple($d, new Iri(Graph::RDF_TYPE), new Iri(Cargo::Dimensions)),
+            new Triple($d, new Iri(Cargo::width), $w),
+            new Triple($d, new Iri(Cargo::height), $h),
+            new Triple($w, new Iri(Graph::RDF_TYPE), new Iri(Cargo::Value)),
+            new Triple($w, new Iri(Cargo::numericalValue), Literal::integer(2)),
+            new Triple($h, new Iri(Graph::RDF_TYPE), new Iri(Cargo::Value)),
+            new Triple($h, new Iri(Cargo::numericalValue), Literal::integer(3)),
+        ]));
+
+        $change = (new ChangeBuilder())->diff($from, $to, 1);
+        self::assertNotNull($change);
+        $result = (new ChangeApplier())->apply($from, 1, $change);
+        self::assertTrue((new Comparer())->isomorphic($result->object->graph, $to->graph), $change->toJson());
+    }
+
+    public function testR3001TwoSeparateNodesBecomingOneSharedNodeStayOne(): void
+    {
+        $iri = new Iri('https://1r.example.com/logistics-objects/p1');
+        $d = new Iri('internal:d');
+        $w = new Iri('internal:w');
+        $h = new Iri('internal:h');
+        $from = new LogisticsObject($iri, new Graph([
+            new Triple($iri, new Iri(Graph::RDF_TYPE), new Iri(Cargo::Piece)),
+            new Triple($iri, new Iri(Cargo::goodsDescription), Literal::string('Books')),
+            new Triple($iri, new Iri(Cargo::dimensions), $d),
+            new Triple($d, new Iri(Graph::RDF_TYPE), new Iri(Cargo::Dimensions)),
+            new Triple($d, new Iri(Cargo::width), $w),
+            new Triple($d, new Iri(Cargo::height), $h),
+            new Triple($w, new Iri(Graph::RDF_TYPE), new Iri(Cargo::Value)),
+            new Triple($w, new Iri(Cargo::numericalValue), Literal::integer(2)),
+            new Triple($h, new Iri(Graph::RDF_TYPE), new Iri(Cargo::Value)),
+            new Triple($h, new Iri(Cargo::numericalValue), Literal::integer(3)),
+        ]));
+        $to = new LogisticsObject($iri, $this->sharedValueGraph($iri, 5));
+
+        $change = (new ChangeBuilder())->diff($from, $to, 1);
+        self::assertNotNull($change);
+        $result = (new ChangeApplier())->apply($from, 1, $change);
+        self::assertTrue((new Comparer())->isomorphic($result->object->graph, $to->graph), $change->toJson());
+        $dims = $result->object->graph->firstObject($iri, Cargo::dimensions);
+        self::assertInstanceOf(Iri::class, $dims);
+        $width = $result->object->graph->firstObject($dims, Cargo::width);
+        $height = $result->object->graph->firstObject($dims, Cargo::height);
+        self::assertNotNull($width);
+        self::assertNotNull($height);
+        self::assertTrue($width->equals($height), 'one shared node, as in the target');
+    }
+
+    public function testR3005AChangeToANodeUnderTwoRootPropertiesReportsBoth(): void
+    {
+        $iri = new Iri('https://1r.example.com/logistics-objects/p1');
+        $v = new Iri('internal:v');
+        $weightFirst = new Graph([new Triple($iri, new Iri(Cargo::grossWeight), $v), ...$this->sharedValueGraph($iri)]);
+        $weightLast = new Graph([...$this->sharedValueGraph($iri), new Triple($iri, new Iri(Cargo::grossWeight), $v)]);
+        $change = new Change($iri, 1, [
+            Operation::delete($v, new Iri(Cargo::numericalValue), OperationObject::literal(Literal::integer(1))),
+            Operation::add($v, new Iri(Cargo::numericalValue), OperationObject::literal(Literal::integer(2))),
+        ]);
+
+        foreach ([$weightFirst, $weightLast] as $graph) {
+            $result = (new ChangeApplier())->apply(new LogisticsObject($iri, $graph), 1, $change);
+            self::assertSame([Cargo::dimensions, Cargo::grossWeight], $result->changedProperties, 'both, whatever the insertion order');
+        }
+
+        // Two paths under the same root property report it once; a cycle terminates.
+        $cyclic = $this->sharedValueGraph($iri);
+        $cyclic->add(new Triple($v, new Iri(Cargo::unit), new Iri('internal:d')));
+        $result = (new ChangeApplier(vocabulary: null))->apply(new LogisticsObject($iri, $cyclic), 1, $change);
+        self::assertSame([Cargo::dimensions], $result->changedProperties);
+    }
 }

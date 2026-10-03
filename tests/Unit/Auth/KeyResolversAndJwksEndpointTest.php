@@ -157,4 +157,108 @@ final class KeyResolversAndJwksEndpointTest extends TestCase
         }
         self::assertCount(2, $http->requests, 'one refresh for the first unknown key id; later request-scoped resolvers see the cooldown in the cache');
     }
+
+    public function testR3TheCooldownExpiresWithTheCacheEntryAndARotatedKeyIsThenFetched(): void
+    {
+        $factory = new Psr17Factory();
+        $clock = new FixedClock('2026-10-02T12:00:00Z');
+        $old = new Rs256Signer(TestKeys::pair('jwks')['private'], 'https://idp.example', $clock, 'k1');
+        $new = new Rs256Signer(TestKeys::pair('rotated')['private'], 'https://idp.example', $clock, 'k2');
+        $http = new FakeHttpClient();
+        $http->queue(new Response(200, [], json_encode(['keys' => [$old->publicJwk()]], JSON_THROW_ON_ERROR)));
+        $http->queue(new Response(200, [], json_encode(['keys' => [$old->publicJwk()]], JSON_THROW_ON_ERROR)));
+        $http->queue(new Response(200, [], json_encode(['keys' => [$old->publicJwk(), $new->publicJwk()]], JSON_THROW_ON_ERROR)));
+        // A PSR-16 cache that honours TTLs against the test clock, unlike ArrayCache.
+        $cache = new class ($clock) implements CacheInterface {
+            /** @var array<string, array{mixed, ?int}> */
+            private array $items = [];
+
+            public function __construct(private readonly FixedClock $clock) {}
+
+            public function get(string $key, mixed $default = null): mixed
+            {
+                if (!isset($this->items[$key])) {
+                    return $default;
+                }
+                [$value, $expires] = $this->items[$key];
+                if ($expires !== null && $expires <= $this->clock->now()->getTimestamp()) {
+                    unset($this->items[$key]);
+
+                    return $default;
+                }
+
+                return $value;
+            }
+
+            public function set(string $key, mixed $value, null|int|DateInterval $ttl = null): bool
+            {
+                $seconds = $ttl instanceof DateInterval ? (int) $ttl->format('%s') + 60 * (int) $ttl->format('%i') : $ttl;
+                $this->items[$key] = [$value, $seconds === null ? null : $this->clock->now()->getTimestamp() + $seconds];
+
+                return true;
+            }
+
+            public function delete(string $key): bool
+            {
+                unset($this->items[$key]);
+
+                return true;
+            }
+
+            public function clear(): bool
+            {
+                $this->items = [];
+
+                return true;
+            }
+
+            public function getMultiple(iterable $keys, mixed $default = null): iterable
+            {
+                $out = [];
+                foreach ($keys as $key) {
+                    $out[$key] = $this->get($key, $default);
+                }
+
+                return $out;
+            }
+
+            /**
+             * @param iterable<mixed, mixed> $values
+             */
+            public function setMultiple(iterable $values, null|int|DateInterval $ttl = null): bool
+            {
+                foreach ($values as $key => $value) {
+                    $this->set(\is_string($key) ? $key : '', $value, $ttl);
+                }
+
+                return true;
+            }
+
+            public function deleteMultiple(iterable $keys): bool
+            {
+                foreach ($keys as $key) {
+                    $this->delete($key);
+                }
+
+                return true;
+            }
+
+            public function has(string $key): bool
+            {
+                return $this->get($key) !== null;
+            }
+        };
+        $make = static fn(): JwksKeyResolver => new JwksKeyResolver(['https://idp.example' => 'https://idp.example/jwks'], $http, $factory, $cache, 3600, refreshCooldownSeconds: 60);
+
+        self::assertCount(1, $make()->publicKeys('https://idp.example', 'k1'));
+        // An unknown kid refreshes once, then every known key is offered for the signature check.
+        $make()->publicKeys('https://idp.example', 'k2');
+        self::assertCount(2, $http->requests, 'not yet published: one refresh');
+        $make()->publicKeys('https://idp.example', 'k2');
+        self::assertCount(2, $http->requests, 'inside the cooldown: no fetch');
+        $clock->advance('+61 seconds');
+        $keys = $make()->publicKeys('https://idp.example', 'k2');
+        self::assertCount(3, $http->requests, 'cooldown over: the rotated key is fetched');
+        self::assertCount(1, $keys, 'the rotated key is now known by its kid');
+    }
 }

@@ -79,4 +79,21 @@ abstract class NotificationOutboxContract extends TestCase
         self::assertStringContainsString('SECRET', $json);
         self::assertStringNotContainsString('after-queue', $json);
     }
+
+    public function testPendingReadsAreSnapshotsToo(): void
+    {
+        $outbox = $this->createOutbox();
+        $piece = \LambdaTwelve\OneRecord\Model\Builder\ObjectBuilder::of(Cargo::Piece)->set(Cargo::goodsDescription, 'SECRET')->build(new Iri(self::OBJECT));
+        $outbox->enqueue(new OutboundNotification(new Iri(self::PARTNER), new Notification(NotificationEventType::LogisticsObjectCreated, $piece->iri, Cargo::Piece, null, [], [], $piece), new DateTimeImmutable('2026-10-02T12:00:00Z'), 'n-1'));
+
+        // Editing what a read handed out must not change what is delivered later under the same id (R3-003).
+        $first = $this->pending($outbox);
+        self::assertCount(1, $first);
+        $first[0]->notification->body?->graph->add(new \LambdaTwelve\OneRecord\Rdf\Triple($piece->iri, new Iri(Cargo::goodsDescription), \LambdaTwelve\OneRecord\Rdf\Literal::string('CHANGED-AFTER-READ')));
+        $second = $this->pending($outbox);
+        self::assertSame('n-1', $second[0]->id);
+        $json = json_encode($second[0]->notification->toJsonLd(), JSON_THROW_ON_ERROR);
+        self::assertStringContainsString('SECRET', $json);
+        self::assertStringNotContainsString('CHANGED-AFTER-READ', $json);
+    }
 }

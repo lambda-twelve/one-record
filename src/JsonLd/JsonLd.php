@@ -17,9 +17,10 @@ final class JsonLd
     private function __construct() {}
 
     /**
-     * @param string|array<string, mixed> $document JSON text or a decoded object
+     * @param string|array<string, mixed> $document
+     * @param Iri|list<Iri>|null $preferredRoot the node(s) to root a flattened document at, in order of preference
      */
-    public static function expand(string|array $document, ?Iri $preferredRoot = null): ExpandedDocument
+    public static function expand(string|array $document, Iri|array|null $preferredRoot = null): ExpandedDocument
     {
         $decoded = \is_string($document) ? Json::decodeObject($document) : $document;
 

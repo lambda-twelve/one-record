@@ -91,15 +91,25 @@ final class Writer
 
         $compactKeys = [];
         foreach ($properties as $predicate => $values) {
-            // A term alias is used only when its coercion fits every value; otherwise the values would
-            // read back as something else (a string as an IRI, R2-002) and the plain compact IRI is written.
-            $term = $context->compactIri($predicate);
-            $coercion = $context->coercionOfTerm($term);
-            if ($coercion !== null && !self::valuesFit($values, $coercion)) {
-                $term = $context->compactIri($predicate, true, false);
-                $coercion = $context->coercionOfTerm($term);
+            // Of the keys that read back as this predicate, the shortest whose coercion fits every value;
+            // a key coerced to @id would turn a string into an IRI (R2-002, R3-002). Two predicates can
+            // never share a key, since every candidate expands to its own predicate.
+            $chosen = null;
+            foreach ($context->keyCandidates($predicate) as $candidate) {
+                $coercion = $context->coercionOfTerm($candidate);
+                if ($coercion === null || self::valuesFit($values, $coercion)) {
+                    $chosen = [$predicate, $coercion];
+                    $key = $candidate;
+                    break;
+                }
             }
-            $compactKeys[$term] = [$predicate, $coercion];
+            if ($chosen === null || !isset($key)) {
+                throw JsonLdException::at('', \sprintf('"%s" cannot be written in this context without changing its values.', $predicate));
+            }
+            if (isset($compactKeys[$key])) {
+                throw new LogicException(\sprintf('Key "%s" chosen for two predicates.', $key));
+            }
+            $compactKeys[$key] = $chosen;
         }
         ksort($compactKeys, SORT_STRING);
         foreach ($compactKeys as $key => [$predicate, $coercion]) {
