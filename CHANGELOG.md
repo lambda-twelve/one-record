@@ -143,6 +143,15 @@ it. From 1.0.0 on, breaking changes need a new major version.
   dropping a predicate or turning a string into an IRI; the client names both
   identities it accepts before a flattened answer's root is chosen; in-memory
   outbox reads hand out copies and the outbox contract states ownership.
+- Fourth adversarial round (2026-10-03): the change builder now builds a
+  correspondence between old and new embedded nodes over the whole graphs
+  before emitting any operation (unchanged content first in every slot, then
+  one-to-one in-place pairs), so an unchanged branch is never edited to serve
+  another, shared nodes split and merge exactly as the target does, and
+  topology-only changes are changes; term definitions in a written `@context`
+  use prefixes only and the reader resolves definitions through other terms,
+  so a datatype alias round-trips instead of failing or changing the
+  datatype; the JWKS rotation test checks the rotated key itself.
 - `Server\Spi\Authenticator` and `Server\Spi\Agent`.
 - Interoperability suite (`tests/Interop/`): NE:ONE built from source at a
   pinned commit as a comparison oracle; the same graph published to both

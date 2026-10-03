@@ -260,5 +260,13 @@ final class KeyResolversAndJwksEndpointTest extends TestCase
         $keys = $make()->publicKeys('https://idp.example', 'k2');
         self::assertCount(3, $http->requests, 'cooldown over: the rotated key is fetched');
         self::assertCount(1, $keys, 'the rotated key is now known by its kid');
+        $modulus = static function (string $pem): string {
+            $key = openssl_pkey_get_public($pem);
+            $details = $key === false ? false : openssl_pkey_get_details($key);
+            $n = \is_array($details) && \is_array($details['rsa'] ?? null) ? ($details['rsa']['n'] ?? null) : null;
+
+            return \is_string($n) ? bin2hex($n) : throw new RuntimeException('not an RSA key');
+        };
+        self::assertSame($modulus(TestKeys::pair('rotated')['public']), $modulus($keys[0]), 'and it is the rotated key, not the old one offered again');
     }
 }

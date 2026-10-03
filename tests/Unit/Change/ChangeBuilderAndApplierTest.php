@@ -577,4 +577,96 @@ final class ChangeBuilderAndApplierTest extends TestCase
         $result = (new ChangeApplier(vocabulary: null))->apply(new LogisticsObject($iri, $cyclic), 1, $change);
         self::assertSame([Cargo::dimensions], $result->changedProperties);
     }
+
+    private const array DIMENSION_PROPERTIES = ['height' => Cargo::height, 'width' => Cargo::width, 'length' => Cargo::length];
+
+    /**
+     * Graphs described by slot: property => [node label, value]; the same label in two slots is one shared node.
+     *
+     * @param array<string, array{string, int}> $slots
+     */
+    private static function dimensionsGraph(Iri $iri, array $slots, string $prefix = 'internal:'): Graph
+    {
+        $d = new Iri($prefix . 'd');
+        $graph = new Graph([
+            new Triple($iri, new Iri(Graph::RDF_TYPE), new Iri(Cargo::Piece)),
+            new Triple($iri, new Iri(Cargo::goodsDescription), Literal::string('Books')),
+            new Triple($iri, new Iri(Cargo::dimensions), $d),
+            new Triple($d, new Iri(Graph::RDF_TYPE), new Iri(Cargo::Dimensions)),
+        ]);
+        $nodes = [];
+        foreach ($slots as $property => [$label, $value]) {
+            $node = new Iri($prefix . $label);
+            $graph->add(new Triple($d, new Iri(self::DIMENSION_PROPERTIES[$property]), $node));
+            if (!isset($nodes[$label])) {
+                $nodes[$label] = true;
+                $graph->add(new Triple($node, new Iri(Graph::RDF_TYPE), new Iri(Cargo::Value)));
+                $graph->add(new Triple($node, new Iri(Cargo::numericalValue), Literal::integer($value)));
+            }
+        }
+
+        return $graph;
+    }
+
+    /**
+     * @return iterable<string, array{array<string, array{string, int}>, array<string, array{string, int}>}>
+     */
+    public static function sharedNodeTransitions(): iterable
+    {
+        yield 'shared 1 -> height 1 / width 2, separate' => [['height' => ['v', 1], 'width' => ['v', 1]], ['height' => ['h', 1], 'width' => ['w', 2]]];
+        yield 'shared 1 -> height 2 / width 1, separate' => [['height' => ['v', 1], 'width' => ['v', 1]], ['height' => ['h', 2], 'width' => ['w', 1]]];
+        yield 'separate 1/2 -> shared 1' => [['height' => ['h', 1], 'width' => ['w', 2]], ['height' => ['v', 1], 'width' => ['v', 1]]];
+        yield 'separate 1/2 -> shared 2' => [['height' => ['h', 1], 'width' => ['w', 2]], ['height' => ['v', 2], 'width' => ['v', 2]]];
+        yield 'height only -> both share that value' => [['height' => ['h', 1]], ['height' => ['v', 1], 'width' => ['v', 1]]];
+        yield 'shared 1 -> two separate 1s' => [['height' => ['v', 1], 'width' => ['v', 1]], ['height' => ['h', 1], 'width' => ['w', 1]]];
+        yield 'two separate 1s -> shared 1' => [['height' => ['h', 1], 'width' => ['w', 1]], ['height' => ['v', 1], 'width' => ['v', 1]]];
+        yield 'width only -> both share value 2' => [['width' => ['w', 1]], ['height' => ['v', 2], 'width' => ['v', 2]]];
+        yield 'shared 1 -> shared 2' => [['height' => ['v', 1], 'width' => ['v', 1]], ['height' => ['v', 2], 'width' => ['v', 2]]];
+        yield 'shared -> height only' => [['height' => ['v', 1], 'width' => ['v', 1]], ['height' => ['v', 1]]];
+        yield 'three sharing -> length alone changes' => [['height' => ['v', 1], 'width' => ['v', 1], 'length' => ['v', 1]], ['height' => ['v', 1], 'width' => ['v', 1], 'length' => ['l', 2]]];
+        yield 'three separate -> all shared' => [['height' => ['h', 1], 'width' => ['w', 2], 'length' => ['l', 3]], ['height' => ['v', 3], 'width' => ['v', 3], 'length' => ['v', 3]]];
+    }
+
+    /**
+     * R4-001: the result must read the target's value through every property and share nodes
+     * exactly as the target does, whatever the embedded ids are called and in either direction.
+     *
+     * @param array<string, array{string, int}> $before
+     * @param array<string, array{string, int}> $after
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('sharedNodeTransitions')]
+    public function testR4001SharedNodeTransitionsPreserveValuesAndSharing(array $before, array $after): void
+    {
+        $iri = new Iri('https://1r.example.com/logistics-objects/p1');
+        foreach ([[$before, $after], [$after, $before]] as [$fromSlots, $toSlots]) {
+            foreach (['internal:', 'internal:other-'] as $targetPrefix) {
+                $from = new LogisticsObject($iri, self::dimensionsGraph($iri, $fromSlots));
+                $to = new LogisticsObject($iri, self::dimensionsGraph($iri, $toSlots, $targetPrefix));
+                $change = (new ChangeBuilder())->diff($from, $to, 1);
+                self::assertNotNull($change, 'a topology change is a change');
+                $result = (new ChangeApplier())->apply($from, 1, $change)->object->graph;
+                $d = $result->firstObject($iri, Cargo::dimensions);
+                self::assertInstanceOf(Iri::class, $d);
+                $nodes = [];
+                foreach (self::DIMENSION_PROPERTIES as $property => $iriOfProperty) {
+                    $node = $result->firstObject($d, $iriOfProperty);
+                    if (!isset($toSlots[$property])) {
+                        self::assertNull($node, $property . ' is gone');
+                        continue;
+                    }
+                    self::assertInstanceOf(Iri::class, $node, $property . ' present');
+                    $value = $result->firstObject($node, Cargo::numericalValue);
+                    self::assertInstanceOf(Literal::class, $value);
+                    self::assertSame((string) $toSlots[$property][1], $value->lexical, $property . ' reads the target value: ' . $change->toJson());
+                    $nodes[$property] = $node->value;
+                }
+                foreach ($nodes as $a => $nodeA) {
+                    foreach ($nodes as $b => $nodeB) {
+                        self::assertSame($toSlots[$a][0] === $toSlots[$b][0], $nodeA === $nodeB, \sprintf('%s and %s share a node exactly when the target does', $a, $b));
+                    }
+                }
+                self::assertTrue((new Comparer())->isomorphic($result, $to->graph), 'no stray nodes remain');
+            }
+        }
+    }
 }

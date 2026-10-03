@@ -45,13 +45,19 @@ version of an object into another, or `null` when they are the same graph.
 Hosts use this when republishing: resolve the new graph, diff against the
 stored version, apply as the holder. Partners use it to request corrections.
 
-An embedded node reached through several links (one `cargo:Value` used as
-both width and height, say) is one node in the change: it is edited or
-introduced once and linked as often as needed, and its own triples are
-deleted only when no link to it survives. The builder matches embedded objects
-by content with the comparer, so `JsonLd\ComparisonBudgetExceeded` can be
-raised for pathologically symmetric structures (see
-[JSON-LD](json-ld.md#comparing-graphs)).
+Embedded objects are handled in two phases. First a correspondence between
+the old and the new embedded nodes is built over the whole graphs: nodes with
+identical content pair up first, in every slot, then a slot left with exactly
+one old and one new node of the same type pairs them for an in-place edit.
+Only then are operations emitted from that correspondence. So an embedded
+node reached through several links (one `cargo:Value` used as both width and
+height, say) is one node in the change: it is edited or introduced once and
+linked as often as needed, a branch that did not change is never edited to
+serve another branch, splitting or merging shared nodes yields exactly the
+target's sharing, and a node's own triples are deleted only when no link to it
+survives. Content matching uses the comparer, so
+`JsonLd\ComparisonBudgetExceeded` can be raised for pathologically symmetric
+structures (see [JSON-LD](json-ld.md#comparing-graphs)).
 
 ## Applying a change
 

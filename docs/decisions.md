@@ -102,3 +102,12 @@ expands to) is decided on the whole graph, not inside the recursion that
 happens to meet one link or one key. Graph-wide decisions now live in one
 place each: `ChangeBuilder::deleteUnreachable()` for what a change removes,
 `Context::keyCandidates()` for what a key may be.
+
+The fourth round showed that deciding deletions graph-wide was still not
+enough while the pairing of old and new nodes happened inside the recursion.
+The builder now has two phases, a correspondence over the whole graphs and
+then emission from it, and the rule is stated plainly: identity is decided
+before any operation is written. The same round found that the writer
+validated keys against the finished context while the reader built
+definitions against prefixes alone; both sides now meet at the definition,
+written with prefixes only and read through other terms when it names them.

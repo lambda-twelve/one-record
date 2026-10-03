@@ -89,17 +89,19 @@ final readonly class Context
             }
         }
 
-        // Term ids are compact IRIs of the prefixes ("cargo:Piece"), resolved once here; a
-        // term cannot refer to itself or to another term, so resolution sees prefixes only.
+        // Term ids and datatypes are compact IRIs of the prefixes ("cargo:Piece") or other terms
+        // ({"str": {"@id": "xsd:string"}, "name": {"@type": "str"}}, JSON-LD's create-term-definition
+        // dependency); each is resolved once, through the other terms as needed, never itself (R4-002).
         $context = new self($prefixes, [], $vocab, $base, $language);
         /** @var array<string, array{id: string, type: ?string}> $resolvedTerms */
         $resolvedTerms = [];
+        $resolving = [];
         foreach ($terms as $term => $definition) {
             $resolvedTerms[$term] = [
-                'id' => $context->expandIri($definition['id'], $path . '.' . $term, vocabRelative: true),
+                'id' => self::resolveDefinitionIri($definition['id'], $term, $terms, $context, $path . '.' . $term, $resolving),
                 'type' => $definition['type'] === null || $definition['type'] === self::JSON_LD_ID
                     ? $definition['type']
-                    : $context->expandIri($definition['type'], $path . '.' . $term . '.@type', vocabRelative: true),
+                    : self::resolveDefinitionIri($definition['type'], $term, $terms, $context, $path . '.' . $term . '.@type', $resolving),
             ];
         }
         /** @var array<string, string> $resolvedPrefixes */
@@ -369,10 +371,12 @@ final readonly class Context
             $raw['@language'] = $this->language;
         }
         foreach ($this->terms as $term => $definition) {
-            // Never compact a definition through the term it defines or through @vocab (AR-007).
-            $entry = ['@id' => $this->compactIri($definition['id'], false)];
+            // A definition is written with prefixes only, never through a term or @vocab: that is
+            // what every reader of a context can resolve while the terms are still being defined
+            // (AR-007, R4-002).
+            $entry = ['@id' => $this->compactWithPrefix($definition['id']) ?? $definition['id']];
             if ($definition['type'] !== null) {
-                $entry['@type'] = $definition['type'] === self::JSON_LD_ID ? self::JSON_LD_ID : $this->compactIri($definition['type']);
+                $entry['@type'] = $definition['type'] === self::JSON_LD_ID ? self::JSON_LD_ID : ($this->compactWithPrefix($definition['type']) ?? $definition['type']);
             }
             // A term whose name is already its compact IRI needs no @id (IATA writes {"api:p": {"@type": "xsd:anyURI"}}).
             if ($entry['@id'] === $term) {
@@ -387,6 +391,29 @@ final readonly class Context
     public function withLanguage(?string $language): self
     {
         return new self($this->prefixes, $this->terms, $this->vocab, $this->base, $language);
+    }
+
+    /**
+     * @return array{id: string, type: ?string}
+     */
+    /**
+     * @param array<string, array{id: string, type: ?string}> $terms the raw definitions
+     * @param array<string, true> $resolving the terms being resolved up the call chain, to refuse a cycle
+     */
+    private static function resolveDefinitionIri(string $value, string $term, array $terms, self $prefixesOnly, string $path, array &$resolving): string
+    {
+        if ($value !== $term && isset($terms[$value])) {
+            if (isset($resolving[$value])) {
+                throw JsonLdException::at($path, \sprintf('Term "%s" is defined through itself', $value));
+            }
+            $resolving[$value] = true;
+            $resolved = self::resolveDefinitionIri($terms[$value]['id'], $value, $terms, $prefixesOnly, $path, $resolving);
+            unset($resolving[$value]);
+
+            return $resolved;
+        }
+
+        return $prefixesOnly->expandIri($value, $path, vocabRelative: true);
     }
 
     /**

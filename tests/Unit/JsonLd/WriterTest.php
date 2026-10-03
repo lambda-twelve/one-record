@@ -253,4 +253,38 @@ final class WriterTest extends TestCase
             self::assertCount(2, JsonLd::expand($written)->graph->objects(new Iri('https://example/p'), 'https://onerecord.iata.org/ns/cargo#goodsDescription'));
         }
     }
+
+    public function testR4002DatatypeAliasesInTermDefinitionsRoundTrip(): void
+    {
+        $xsd = 'http://www.w3.org/2001/XMLSchema#';
+        $cargo = 'https://onerecord.iata.org/ns/cargo#';
+        $cases = [
+            'no @vocab' => ['cargo' => $cargo, 'xsd' => $xsd, 'str' => ['@id' => 'xsd:string'], 'name' => ['@id' => 'cargo:goodsDescription', '@type' => 'xsd:string']],
+            'with @vocab' => ['@vocab' => $cargo, 'cargo' => $cargo, 'xsd' => $xsd, 'str' => ['@id' => 'xsd:string'], 'name' => ['@id' => 'cargo:goodsDescription', '@type' => 'xsd:string']],
+            'alias used as the datatype, defined after its use' => ['cargo' => $cargo, 'xsd' => $xsd, 'name' => ['@id' => 'cargo:goodsDescription', '@type' => 'str'], 'str' => ['@id' => 'xsd:string']],
+            'alias chain' => ['cargo' => $cargo, 'xsd' => $xsd, 'name' => ['@id' => 'cargo:goodsDescription', '@type' => 'text'], 'text' => ['@id' => 'str'], 'str' => ['@id' => 'xsd:string']],
+        ];
+        foreach ($cases as $label => $context) {
+            $doc = JsonLd::expand(['@context' => $context, '@id' => 'https://example/p', 'name' => 'Books']);
+            $literal = $doc->graph->firstObject(new Iri('https://example/p'), $cargo . 'goodsDescription');
+            self::assertInstanceOf(Literal::class, $literal, $label);
+            self::assertSame($xsd . 'string', $literal->datatype, $label);
+
+            $written = (new Writer())->write($doc->graph, $doc->root, $doc->context);
+            $again = JsonLd::expand($written)->graph->firstObject(new Iri('https://example/p'), $cargo . 'goodsDescription');
+            self::assertInstanceOf(Literal::class, $again, $label);
+            self::assertSame('Books', $again->lexical, $label);
+            self::assertSame($xsd . 'string', $again->datatype, $label . ': the datatype survives the writer\'s own context');
+            self::assertSame($doc->context->toRaw(), Context::fromRaw($doc->context->toRaw())->toRaw(), $label . ': the serialised context reads back as itself');
+        }
+
+        // A second datatype, and a term defined through itself is refused rather than looping.
+        $doc = JsonLd::expand(['@context' => ['cargo' => $cargo, 'xsd' => $xsd, 'dec' => ['@id' => 'xsd:decimal'], 'amount' => ['@id' => 'cargo:numericalValue', '@type' => 'dec']], '@id' => 'https://example/p', 'amount' => '1.50']);
+        $written = (new Writer())->write($doc->graph, $doc->root, $doc->context);
+        $again = JsonLd::expand($written)->graph->firstObject(new Iri('https://example/p'), $cargo . 'numericalValue');
+        self::assertInstanceOf(Literal::class, $again);
+        self::assertSame([$xsd . 'decimal', '1.50'], [$again->datatype, $again->lexical]);
+        $this->expectException(\LambdaTwelve\OneRecord\JsonLd\JsonLdException::class);
+        Context::fromRaw(['a' => ['@id' => 'b'], 'b' => ['@id' => 'a']]);
+    }
 }
