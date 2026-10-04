@@ -44,11 +44,12 @@ final class GraphValidator
     public function validate(Graph $graph, Iri|BlankNode $root, array $tolerated = [], bool $nestedLogisticsObjects = false): array
     {
         $violations = [];
-        // Every node the graph describes is an embedded node, whatever id it carries (R11-001); a typed
-        // link, which only states the class of what it points to, is judged through its range below.
+        // Every node the graph describes is an embedded node, whatever id it carries (R11-001). A typed
+        // link, which only states the class of what it points to, is a reference: its class must still
+        // exist (R12-001), a logistics object class or a code list, and the range check below applies.
         $subjects = [$root->toNTriples() => $root];
         foreach ($graph->subjects() as $subject) {
-            if (!$subject->equals($root) && LogisticsObject::isEmbeddedIn($graph, $subject, $root instanceof Iri ? $root : null)) {
+            if (!$subject->equals($root)) {
                 $subjects[$subject->toNTriples()] = $subject;
             }
         }
@@ -56,6 +57,14 @@ final class GraphValidator
             $isRoot = $subject->equals($root);
             $subjectName = $subject instanceof Iri ? $subject->value : $subject->toNTriples();
             $types = array_map(static fn(Iri $t): string => $t->value, $graph->typesOf($subject));
+            if (!$isRoot && !LogisticsObject::isEmbeddedIn($graph, $subject, $root instanceof Iri ? $root : null)) {
+                foreach ($types as $type) {
+                    if (!$this->vocabulary->isClass($type) && $this->vocabulary->codeList($type) === null) {
+                        $violations[] = new GraphViolation(\sprintf('"%s" is not a class of the ontology.', $type), Graph::RDF_TYPE, $subjectName);
+                    }
+                }
+                continue;
+            }
             foreach ($types as $type) {
                 if (!$this->vocabulary->isClass($type)) {
                     $violations[] = new GraphViolation(\sprintf('"%s" is not a class of the ontology.', $type), Graph::RDF_TYPE, $subjectName);

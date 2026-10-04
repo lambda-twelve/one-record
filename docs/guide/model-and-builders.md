@@ -79,9 +79,17 @@ the spec's recommended `internal:<uuid5>` scheme) mints them when an object
 is first stored, for every embedded node: a blank node, and equally a node the
 client identified itself (an `https:` or `urn:` id, NE:ONE's `neone:` scheme),
 since an id of its own makes a node no less embedded. The minted ids are kept
-in the stored graph from then on; a client learns them from its next read. A
-typed link, a reference that states only the class of what it points to, is
-not an embedded node and keeps its id.
+in the stored graph from then on; a client learns them from its next read.
+
+A **typed link**, a reference that states only the class of what it points
+to (`{"@id": "…/piece-2", "@type": "cargo:Piece"}`), is not an embedded node:
+it keeps its id, its class must be one the ontology knows (a data model class
+or a code list), and it survives changes to the rest of the object for as long
+as something links to it. This holds whatever the class: a type-only node with
+an id of its own is always read as a reference, so to embed an object under
+your own id, give it at least one property, or make it a blank node. A change
+cannot turn a reference into an embedded node; it adds a new embedded node
+(`_:b0`) and deletes the link instead.
 
 ## Building events
 

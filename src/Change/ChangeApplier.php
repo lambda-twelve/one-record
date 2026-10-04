@@ -332,8 +332,13 @@ final class ChangeApplier
             $node = array_shift($queue);
             foreach ($graph->about($node) as $triple) {
                 $object = $triple->object;
-                if (($object instanceof BlankNode || $object instanceof Iri) && !isset($reachable[$object->toNTriples()]) && LogisticsObject::isEmbeddedIn($graph, $object, $root)) {
-                    $reachable[$object->toNTriples()] = true;
+                if (!$object instanceof BlankNode && !$object instanceof Iri || isset($reachable[$object->toNTriples()])) {
+                    continue;
+                }
+                // Whatever is linked from a reachable node stays, a typed link's class included (R12-002);
+                // only an embedded node is followed further.
+                $reachable[$object->toNTriples()] = true;
+                if (LogisticsObject::isEmbeddedIn($graph, $object, $root)) {
                     $queue[] = $object;
                 }
             }

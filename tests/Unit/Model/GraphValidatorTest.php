@@ -140,4 +140,20 @@ final class GraphValidatorTest extends TestCase
             self::assertSame(['https://onerecord.iata.org/ns/cargo#numericalValue expects http://www.w3.org/2001/XMLSchema#double, got http://www.w3.org/2001/XMLSchema#string.'], self::messages($valid), 'and so is what hangs below it: ' . $id);
         }
     }
+
+    public function testR12001ATypedLinkMustNameAClassTheOntologyKnows(): void
+    {
+        $p = new Iri(self::PIECE);
+        $link = static fn(string $property, string $target, string $class): Graph => new Graph([...self::piece(), new Triple($p, new Iri($property), new Iri($target)), new Triple(new Iri($target), new Iri(Graph::RDF_TYPE), new Iri($class))]);
+
+        // The reviewer's probe: a type-only node with an id of its own, of a class nobody knows.
+        self::assertSame(['"https://example.com/FakeDimensionsClass" is not a class of the ontology.'], self::messages($link(Cargo::dimensions, 'https://attacker.example/only-type-dim', 'https://example.com/FakeDimensionsClass')));
+        // The nearest links that must pass: a logistics object, a code-list member typed with its list.
+        self::assertSame([], self::messages($link(Cargo::containedPieces, 'https://1r.example.com/logistics-objects/p2', Cargo::Piece)));
+        $unit = new Iri('https://onerecord.iata.org/ns/code-lists/MeasurementUnitCode#KGM');
+        $weight = new Graph([...self::piece(), new Triple($p, new Iri(Cargo::grossWeight), new Iri('internal:w')), new Triple(new Iri('internal:w'), new Iri(Graph::RDF_TYPE), new Iri(Cargo::Value)), new Triple(new Iri('internal:w'), new Iri(Cargo::numericalValue), Literal::double(1.0)), new Triple(new Iri('internal:w'), new Iri(Cargo::unit), $unit), new Triple($unit, new Iri(Graph::RDF_TYPE), new Iri('https://onerecord.iata.org/ns/code-lists/MeasurementUnitCode'))]);
+        self::assertSame([], self::messages($weight));
+        // A typed link of a known class outside the range is still caught by the range.
+        self::assertCount(1, self::messages($link(Cargo::dimensions, 'https://1r.example.com/logistics-objects/p2', Cargo::Piece)));
+    }
 }

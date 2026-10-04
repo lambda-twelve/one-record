@@ -46,6 +46,14 @@ it. From 1.0.0 on, breaking changes need a new major version.
   server-minted `internal:` id when the object is stored, and the change
   applier addresses and cleanses it whatever id it carries (adversarial
   review 11).
+- A typed link, a reference that states the class of what it points to and
+  nothing else, escaped validation when its class was unknown to the
+  ontology (R12-001), and an unrelated change removed its class as an
+  orphan (R12-002). Its class must now exist, as a class of the data model
+  or as a code list, and whatever a reachable node links to is kept. A
+  type-only node with an id of its own is a reference by design, not an
+  embedded node: a change cannot describe it in place, and the guide says
+  how to embed instead (R12-003).
 
 ## [1.0.0-beta6] - 2026-10-04
 
