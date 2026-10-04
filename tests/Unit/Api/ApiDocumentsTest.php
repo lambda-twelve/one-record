@@ -402,4 +402,22 @@ final class ApiDocumentsTest extends TestCase
         self::assertSame('409', $read->errors[0]->details[0]->code);
         self::assertSame([self::PIECE], array_map(static fn(Iri $i): string => $i->value, $read->logisticsObjects()));
     }
+
+    public function testAnAccessDelegationNamesEachObjectDelegateAndPermissionOnce(): void
+    {
+        $p = new Iri('https://1r.example.com/logistics-objects/p1');
+        $q = new Iri('https://1r.example.com/logistics-objects/p2');
+        $partner = new Iri('https://1r.partner.example/logistics-objects/partner');
+        $delegation = new AccessDelegation([Permission::GetLogisticsObject, Permission::GetLogisticsObject], [$partner, new Iri($partner->value)], [$p, $q, new Iri($p->value)]);
+        self::assertSame([Permission::GetLogisticsObject], $delegation->permissions);
+        self::assertSame([$partner->value], array_map(static fn(Iri $i): string => $i->value, $delegation->delegates));
+        self::assertSame([$p->value, $q->value], array_map(static fn(Iri $i): string => $i->value, $delegation->logisticsObjects), 'order kept, repeat dropped (laravel3.md, item 2)');
+
+        // The same through a document that repeats the object.
+        $json = ['@context' => ['api' => 'https://onerecord.iata.org/ns/api#'], '@type' => 'api:AccessDelegation',
+            'api:hasPermission' => [['@id' => 'api:GET_LOGISTICS_OBJECT']],
+            'api:isRequestedFor' => [['@id' => $partner->value]],
+            'api:hasLogisticsObject' => [['@id' => $p->value], ['@id' => $p->value]]];
+        self::assertCount(1, AccessDelegation::fromJsonLd($json)->logisticsObjects);
+    }
 }

@@ -30,13 +30,56 @@ final readonly class AccessDelegation
      * @param non-empty-list<Iri> $logisticsObjects
      */
     public function __construct(
-        public array $permissions,
-        public array $delegates,
-        public array $logisticsObjects,
+        array $permissions,
+        array $delegates,
+        array $logisticsObjects,
         public ?string $description = null,
         public bool $notifyRequestStatusChange = false,
         public ?DateTimeImmutable $expiresAt = null,
-    ) {}
+    ) {
+        // A document may repeat an object or a delegate; a store projecting (request, object) rows
+        // must not see the repeat, so the lists are unique from construction, order kept.
+        $this->permissions = self::uniquePermissions($permissions);
+        $this->delegates = self::uniqueIris($delegates);
+        $this->logisticsObjects = self::uniqueIris($logisticsObjects);
+    }
+
+    /** @var non-empty-list<Permission> */
+    public array $permissions;
+
+    /** @var non-empty-list<Iri> the organisations access is requested for (api:isRequestedFor) */
+    public array $delegates;
+
+    /** @var non-empty-list<Iri> */
+    public array $logisticsObjects;
+
+    /**
+     * @param non-empty-list<Iri> $iris
+     * @return non-empty-list<Iri>
+     */
+    private static function uniqueIris(array $iris): array
+    {
+        $unique = [];
+        foreach ($iris as $iri) {
+            $unique[$iri->value] ??= $iri;
+        }
+
+        return array_values($unique);
+    }
+
+    /**
+     * @param non-empty-list<Permission> $permissions
+     * @return non-empty-list<Permission>
+     */
+    private static function uniquePermissions(array $permissions): array
+    {
+        $unique = [];
+        foreach ($permissions as $permission) {
+            $unique[$permission->value] ??= $permission;
+        }
+
+        return array_values($unique);
+    }
 
     /**
      * @param string|array<string, mixed>|ExpandedDocument $document

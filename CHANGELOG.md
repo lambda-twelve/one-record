@@ -12,7 +12,26 @@ it. From 1.0.0 on, breaking changes need a new major version.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- `ServerConfig::problems(array $settings)`: what is wrong with a set of
+  settings, in plain sentences, without constructing anything, for a host's
+  status page on an install that is not configured yet. The constructor
+  throws the first of them.
+
+### Changed
+
+- `ActionRequestStore::save()` states its envelope: the server saves a
+  request once and moves it on with `transition()`; a later `save()` under
+  the same IRI may replace status, history and errors, while type, payload,
+  objects, requester and request time are fixed by the first save. The
+  contract no longer asks a store to move a re-saved request to another
+  object (beta5's test is withdrawn), since the SDK never does that and two
+  hosts' query columns had been caught between the two readings (Laravel
+  integration review, round 3).
+- `AccessDelegation` keeps each permission, delegate and logistics object
+  once, in order, so a store projecting one row per (request, object) never
+  sees a repeat.
 
 ## [1.0.0-beta5] - 2026-10-04
 

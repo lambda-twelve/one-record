@@ -44,27 +44,95 @@ final readonly class ServerConfig
         public bool $bulkLogisticsEvents = false,
         public ?string $dataHolderType = null,
     ) {
-        if (preg_match('#^https?://[^/\s]+$#', $baseUrl) !== 1) {
-            throw new InvalidArgumentException(\sprintf('The base URL must be scheme and host only, got "%s".', $baseUrl));
-        }
-        if ($basePath !== '' && (!str_starts_with($basePath, '/') || str_ends_with($basePath, '/'))) {
-            throw new InvalidArgumentException('The base path must start with "/" and not end with one.');
+        $problems = self::problems(['baseUrl' => $baseUrl, 'dataHolder' => $dataHolder, 'basePath' => $basePath, 'apiVersions' => $apiVersions, 'dataModelVersions' => $dataModelVersions, 'languages' => $languages, 'maxBodyBytes' => $maxBodyBytes, 'embeddedDepth' => $embeddedDepth]);
+        if ($problems !== []) {
+            throw new InvalidArgumentException($problems[0]);
         }
         $versions = $apiVersions ?? ApiVersion::allDescending();
-        if ($versions === []) {
-            throw new InvalidArgumentException('At least one API version must be served.');
-        }
         usort($versions, static fn(ApiVersion $a, ApiVersion $b): int => version_compare($b->value, $a->value));
-        $this->apiVersions = $versions;
+        $this->apiVersions = $versions === [] ? ApiVersion::allDescending() : $versions;
         $models = $dataModelVersions ?? array_reverse(DataModelVersion::cases());
-        if ($models === []) {
-            throw new InvalidArgumentException('At least one data model version must be advertised.');
-        }
         usort($models, static fn(DataModelVersion $a, DataModelVersion $b): int => version_compare($b->value, $a->value));
-        $this->dataModelVersions = $models;
-        if (!\in_array('en-US', $languages, true)) {
-            throw new InvalidArgumentException('en-US must be among the supported languages (the spec requires it).');
+        $this->dataModelVersions = $models === [] ? array_reverse(DataModelVersion::cases()) : $models;
+    }
+
+    /**
+     * What is wrong with a set of settings, in plain sentences, without
+     * constructing anything: for a host's status page on an install that is
+     * not configured yet. Empty means the constructor would accept them.
+     * Values may be the typed objects the constructor takes or the raw
+     * strings a settings form holds (version strings, an IRI as a string).
+     *
+     * @param array<string, mixed> $settings keys as the constructor's parameters; a missing key means "not set"
+     * @return list<string>
+     */
+    public static function problems(array $settings): array
+    {
+        $problems = [];
+        $baseUrl = $settings['baseUrl'] ?? null;
+        if (!\is_string($baseUrl) || $baseUrl === '') {
+            $problems[] = 'The base URL is not set.';
+        } elseif (preg_match('#^https?://[^/\s]+$#', $baseUrl) !== 1) {
+            $problems[] = \sprintf('The base URL must be scheme and host only, got "%s".', $baseUrl);
         }
+        $holder = $settings['dataHolder'] ?? null;
+        if ($holder === null || $holder === '') {
+            $problems[] = 'The data holder is not set: the IRI of the organisation this server speaks for.';
+        } elseif (!$holder instanceof Iri) {
+            if (!\is_string($holder)) {
+                $problems[] = 'The data holder must be an IRI.';
+            } else {
+                try {
+                    new Iri($holder);
+                } catch (InvalidArgumentException $e) {
+                    $problems[] = 'The data holder is not a valid IRI: ' . $e->getMessage();
+                }
+            }
+        }
+        $basePath = $settings['basePath'] ?? '';
+        if (!\is_string($basePath)) {
+            $problems[] = 'The base path must be a string.';
+        } elseif ($basePath !== '' && (!str_starts_with($basePath, '/') || str_ends_with($basePath, '/'))) {
+            $problems[] = 'The base path must start with "/" and not end with one.';
+        }
+        $versions = $settings['apiVersions'] ?? null;
+        if ($versions !== null) {
+            if (!\is_array($versions) || $versions === []) {
+                $problems[] = 'At least one API version must be served.';
+            } else {
+                foreach ($versions as $version) {
+                    if (!$version instanceof ApiVersion && (!\is_string($version) || ApiVersion::tryFrom($version) === null)) {
+                        $problems[] = \sprintf('Unknown API version "%s"; this package knows %s.', \is_scalar($version) ? (string) $version : \gettype($version), implode(', ', array_map(static fn(ApiVersion $v): string => $v->value, ApiVersion::cases())));
+                    }
+                }
+            }
+        }
+        $models = $settings['dataModelVersions'] ?? null;
+        if ($models !== null) {
+            if (!\is_array($models) || $models === []) {
+                $problems[] = 'At least one data model version must be advertised.';
+            } else {
+                foreach ($models as $model) {
+                    if (!$model instanceof DataModelVersion && (!\is_string($model) || DataModelVersion::tryFrom($model) === null)) {
+                        $problems[] = \sprintf('Unknown data model version "%s"; this package knows %s.', \is_scalar($model) ? (string) $model : \gettype($model), implode(', ', array_map(static fn(DataModelVersion $v): string => $v->value, DataModelVersion::cases())));
+                    }
+                }
+            }
+        }
+        $languages = $settings['languages'] ?? ['en-US'];
+        if (!\is_array($languages) || !\in_array('en-US', $languages, true)) {
+            $problems[] = 'en-US must be among the supported languages (the spec requires it).';
+        }
+        $maxBody = $settings['maxBodyBytes'] ?? 1;
+        if (!\is_int($maxBody) || $maxBody < 1) {
+            $problems[] = 'The request body limit must be a positive number of bytes.';
+        }
+        $depth = $settings['embeddedDepth'] ?? 0;
+        if (!\is_int($depth) || $depth < 0) {
+            $problems[] = 'The embedding depth must be zero or more.';
+        }
+
+        return $problems;
     }
 
     /**

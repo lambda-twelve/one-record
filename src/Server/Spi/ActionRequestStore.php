@@ -16,8 +16,13 @@ use LambdaTwelve\OneRecord\Rdf\Iri;
 interface ActionRequestStore
 {
     /**
-     * Stores a new request, or replaces one whole. For a status change use
-     * transition(), which refuses to overwrite a state another worker reached first.
+     * Stores a new request. The server calls this exactly once per request and
+     * moves it on with transition() from then on. A later save() under the same
+     * IRI may replace what transition() changes (status, status history,
+     * errors); the type, payload, the objects and topic the request concerns,
+     * the requester and the request time are fixed by the first save, the SDK
+     * never changes them afterwards, and a store may rely on that for the
+     * query columns it keeps next to the document.
      */
     public function save(ActionRequest $request): void;
 

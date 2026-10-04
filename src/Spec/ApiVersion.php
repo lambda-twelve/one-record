@@ -29,11 +29,14 @@ enum ApiVersion: string
     /**
      * Highest first, the order server information advertises and negotiation prefers.
      *
-     * @return list<self>
+     * @return non-empty-list<self>
      */
     public static function allDescending(): array
     {
-        return array_reverse(self::cases());
+        $cases = array_reverse(self::cases());
+        \assert($cases !== []);
+
+        return $cases;
     }
 
     /**
