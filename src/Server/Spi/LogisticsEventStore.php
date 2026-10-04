@@ -12,6 +12,11 @@ use LambdaTwelve\OneRecord\Rdf\Iri;
  * An append-only log of events per logistics object. Events are never
  * changed or deleted through the API (the spec), so the interface has no
  * update; eraseFor() exists for the host's data-protection operation only.
+ *
+ * Every event a store receives carries cargo:eventDate: the server refuses a
+ * posted event without one and the checked builder refuses to build one. A
+ * store may rely on that for its occurred-at filters and sorting; the
+ * in-memory store's fallbacks to the receipt time are defensive only.
  */
 interface LogisticsEventStore
 {

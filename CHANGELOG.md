@@ -12,7 +12,18 @@ it. From 1.0.0 on, breaking changes need a new major version.
 
 ## [Unreleased]
 
+### Added
+
+- `Testing\Contract\*ContractTests`: every store contract is also a trait,
+  for hosts whose test cases must extend a framework base class (Testbench,
+  `KernelTestBase`) and so cannot extend the abstract contract; the abstract
+  class is now the trait on a bare `TestCase`, so the two cannot drift.
+
 ### Changed
+
+- `LogisticsEventStore` states that every event it receives carries
+  `cargo:eventDate` (the server and the checked builder both refuse one
+  without), so stores need no semantics for date-less events.
 
 - A status-change notification for an action request over several logistics
   objects (an access delegation, typically) no longer names an arbitrary first

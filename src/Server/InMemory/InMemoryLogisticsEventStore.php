@@ -62,6 +62,8 @@ final class InMemoryLogisticsEventStore implements LogisticsEventStore
             if ($query->eventCodes !== [] && array_filter($query->eventCodes, static fn(string $c): bool => $event->matchesCode($c)) === []) {
                 return false;
             }
+            // eventDate is guaranteed by the server and the checked builder; the receipt-time fallbacks
+            // below only keep this store total over events stored by other means.
             $created = $event->creationDate() ?? $event->created;
             $occurred = $event->eventDate();
             if ($query->createdAfter !== null && $created <= $query->createdAfter) {

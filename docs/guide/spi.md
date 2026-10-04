@@ -137,12 +137,21 @@ returns the PSR-15 handler; `InMemoryServer` is a worked example of the wiring.
 
 ## Testing your implementation
 
-`Testing\Contract` ships one abstract PHPUnit test class per store interface
+`Testing\Contract` ships the behaviour every store must have as PHPUnit
+tests, in two forms per interface. The abstract classes
 (`LogisticsObjectStoreContract`, `LogisticsEventStoreContract`,
 `ActionRequestStoreContract`, `SubscriptionStoreContract`,
-`AccessDelegationStoreContract`, `NotificationOutboxContract`). Extend one,
-return your store from its factory method, and the tests that prove the
-in-memory stores prove yours. `Testing` also holds the doubles the SDK's own
+`AccessDelegationStoreContract`, `NotificationOutboxContract`) extend
+PHPUnit's `TestCase`: extend one, return your store from its factory method,
+and the tests that prove the in-memory stores prove yours. When your test
+case must extend a framework base class instead (Laravel's Testbench,
+Drupal's `KernelTestBase`), use the trait behind each class
+(`LogisticsObjectStoreContractTests` and so on) in your own test case; it
+carries the same tests and the same factory hook. The class is only the
+trait on a bare `TestCase`, so the two cannot drift. Stores are expected to
+start empty, and every event handed to a store carries `cargo:eventDate`: the
+server refuses a posted event without one, and so does the checked builder.
+`Testing` also holds the doubles the SDK's own
 tests use: `FixedClock`, `HeaderAuthenticator`, `RecordingDispatcher`,
 `RecordingUnitOfWork`, `FakeHttpClient`, `InProcessHttpClient` (the SDK
 client against a PSR-15 handler in one process) and `ArrayCache`. PHPUnit is
