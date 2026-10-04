@@ -10,9 +10,15 @@ use Throwable;
 /**
  * What a host's outbox worker does after a failed delivery. Every host needs
  * the same classification, so it lives here: transport failures and the
- * statuses that say "not now" (5xx, 408, 429) are retried with backoff;
- * every other HTTP answer is the recipient's final word; anything else is a
- * defect on the sending side and not worth a retry either.
+ * statuses that say "not now" (5xx, 408, 429) are retried with backoff,
+ * whether they came from the notification itself or from fetching the token
+ * for it; every other HTTP answer, and refused credentials, is final; anything
+ * else is a defect on the sending side and not worth a retry either.
+ *
+ * Pass whatever you caught. The SDK client wraps transport failures in a
+ * ClientException with the PSR exception as its cause, so the chain of
+ * previous exceptions is walked and the first cause that says something
+ * decides.
  */
 enum DeliveryVerdict
 {
@@ -21,13 +27,23 @@ enum DeliveryVerdict
 
     public static function of(Throwable $failure): self
     {
-        if ($failure instanceof OneRecordHttpException) {
-            return $failure->status >= 500 || $failure->status === 408 || $failure->status === 429 ? self::Retry : self::Reject;
-        }
-        if ($failure instanceof ClientExceptionInterface) {
-            return self::Retry;
+        for ($cause = $failure; $cause !== null; $cause = $cause->getPrevious()) {
+            if ($cause instanceof OneRecordHttpException) {
+                return self::forStatus($cause->status);
+            }
+            if ($cause instanceof TokenEndpointException) {
+                return self::forStatus($cause->status);
+            }
+            if ($cause instanceof ClientExceptionInterface) {
+                return self::Retry;
+            }
         }
 
         return self::Reject;
+    }
+
+    private static function forStatus(int $status): self
+    {
+        return $status >= 500 || $status === 408 || $status === 429 ? self::Retry : self::Reject;
     }
 }

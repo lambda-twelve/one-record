@@ -117,4 +117,27 @@ final class ClientCredentialsTokenProviderTest extends TestCase
             ->withBody($factory->createStream('grant_type=client_credentials'));
         self::assertSame(200, $endpoint->handle($request)->getStatusCode());
     }
+
+    public function testATokenEndpointAnswerCarriesItsStatusAndOauthError(): void
+    {
+        $factory = new Psr17Factory();
+        $http = (new FakeHttpClient())->queue(new Response(400, ['Content-Type' => 'application/json'], '{"error":"invalid_client","error_description":"secret rotated"}'));
+        $provider = new ClientCredentialsTokenProvider($http, $factory, $factory, new FixedClock(), self::TOKEN_URL, 'awback', 's3cret');
+        try {
+            $provider->token('https://partner.example');
+            self::fail('refused');
+        } catch (\LambdaTwelve\OneRecord\Client\TokenEndpointException $e) {
+            self::assertSame(400, $e->status);
+            self::assertSame('invalid_client', $e->error);
+            self::assertStringNotContainsString('secret rotated', $e->getMessage(), 'the body is never echoed');
+        }
+        $http->queue(new Response(503, [], 'maintenance'));
+        try {
+            $provider->token('https://partner.example');
+            self::fail('outage');
+        } catch (\LambdaTwelve\OneRecord\Client\TokenEndpointException $e) {
+            self::assertSame(503, $e->status);
+            self::assertNull($e->error);
+        }
+    }
 }

@@ -192,4 +192,25 @@ trait ActionRequestStoreContractTests
         }
         self::assertSame(RequestStatus::Accepted, $store->get($pending->iri)->status, 'the stored state is untouched');
     }
+
+    public function testReplacingARequestMovesItToTheObjectItNowConcerns(): void
+    {
+        $store = $this->createStore();
+        $a = new Iri(self::CONTRACT_OBJECT);
+        $b = new Iri(self::CONTRACT_OTHER);
+        $store->save($this->verification('v1', '2026-10-02T12:00:00Z', self::CONTRACT_OBJECT));
+        $store->save($this->change('c1', '2026-10-02T12:01:00Z', 1, self::CONTRACT_OBJECT));
+        self::assertSame(['v1', 'c1'], self::ids($store->auditTrail($a, AuditTrailQuery::all())));
+        self::assertSame(['c1'], self::ids($store->pendingChanges($a)));
+
+        // save() replaces the request whole, including which object it concerns: a store that keeps a
+        // request-to-object projection must not leave the old row behind.
+        $store->save($this->verification('v1', '2026-10-02T12:00:00Z', self::CONTRACT_OTHER));
+        $store->save($this->change('c1', '2026-10-02T12:01:00Z', 1, self::CONTRACT_OTHER));
+        self::assertSame([], self::ids($store->auditTrail($a, AuditTrailQuery::all())), 'A no longer lists the moved requests');
+        self::assertSame([], self::ids($store->pendingChanges($a)));
+        self::assertSame(['v1', 'c1'], self::ids($store->auditTrail($b, AuditTrailQuery::all())), 'B lists them, once each');
+        self::assertSame(['c1'], self::ids($store->pendingChanges($b)));
+        self::assertSame(self::CONTRACT_OTHER, $store->get(new Iri('https://1r.example.com/action-requests/v1'))?->logisticsObjects()[0]->value);
+    }
 }

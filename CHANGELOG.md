@@ -12,7 +12,21 @@ it. From 1.0.0 on, breaking changes need a new major version.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- `Client\TokenEndpointException` (extends `ClientException`) with the status
+  and the OAuth `error` code, thrown by `ClientCredentialsTokenProvider` when
+  the token endpoint answers without a token.
+- The `ActionRequestStore` contract checks that replacing a request under the
+  same IRI moves it to the object it now concerns, in `auditTrail()` and
+  `pendingChanges()`.
+
+### Fixed
+
+- `Client\DeliveryVerdict::of()` walks the chain of previous exceptions, so a
+  transport failure the SDK client wrapped in a `ClientException`, or a
+  token-endpoint outage, is `Retry` rather than `Reject`; refused credentials
+  stay final (Drupal integration review, round 3).
 
 ## [1.0.0-beta4] - 2026-10-04
 

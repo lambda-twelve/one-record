@@ -95,7 +95,7 @@ final class ClientCredentialsTokenProvider implements TokenProvider
                 $error = \is_array($decoded) && \is_string($decoded['error'] ?? null) ? $decoded['error'] : null;
             } catch (Throwable) {
             }
-            throw new ClientException(\sprintf('Token endpoint %s answered %d%s.', $this->tokenUrl, $response->getStatusCode(), $error !== null ? ' (' . $error . ')' : ''));
+            throw new TokenEndpointException($response->getStatusCode(), $error, $this->tokenUrl);
         }
         try {
             $decoded = json_decode($body, true, 16, JSON_THROW_ON_ERROR);
