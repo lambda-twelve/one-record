@@ -24,6 +24,7 @@ use LambdaTwelve\OneRecord\Server\Spi\OutboundNotification;
 use LambdaTwelve\OneRecord\Server\Spi\StoreException;
 use LambdaTwelve\OneRecord\Testing\HeaderAuthenticator;
 use LambdaTwelve\OneRecord\Testing\RecordingUnitOfWork;
+use LogicException;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use PHPUnit\Framework\Attributes\CoversNothing;
 use Psr\Log\AbstractLogger;
@@ -104,7 +105,7 @@ final class HostFeedbackTest extends ServerTestCase
             /** @return array{string, string} */
             public function only(): array
             {
-                return $this->records[0] ?? throw new \LogicException('nothing was logged');
+                return $this->records[0] ?? throw new LogicException('nothing was logged');
             }
         };
         $persistent = new class implements NotificationOutbox {
