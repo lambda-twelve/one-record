@@ -48,6 +48,7 @@ final class DataHolder
     {
         return $this->services->unitOfWork->run(function () use ($object): StoredObject {
             $stored = $this->services->objects->create($object->withEmbeddedIds($this->services->embeddedIds), $this->services->clock->now());
+            Deprecations::log($stored->object->graph, $stored->object->iri, $this->services->vocabulary, $this->services->logger);
             $this->services->dispatcher->dispatch(new LogisticsObjectCreated($stored, $this->services->config->dataHolder));
             (new Fanout($this->services))->logisticsObjectCreated($stored);
 
@@ -77,15 +78,16 @@ final class DataHolder
     /**
      * Apply a change of the holder's own making: created and accepted at once.
      *
-     * @throws ChangeFailed when the change could not be applied; the failed request is kept only if the unit of work commits it
+     * @throws ChangeFailed when the change was not applied (it failed, or a creation listener rejected it); the request is kept only if the unit of work commits it
      */
     public function change(Change $change): ActionRequest
     {
         return $this->services->unitOfWork->run(function () use ($change): ActionRequest {
             $request = $this->requests->create($change, $this->services->config->dataHolder);
-            $decided = $this->requests->accept($request, $this->services->config->dataHolder);
-            if ($decided->status === RequestStatus::Failed) {
-                // Returning the failed request read as success to callers checking for null (AR-027).
+            // A creation listener may already have decided it (R7-001); deciding twice is an illegal transition.
+            $decided = $request->status === RequestStatus::Pending ? $this->requests->accept($request, $this->services->config->dataHolder) : $request;
+            if ($decided->status !== RequestStatus::Accepted) {
+                // Returning a failed or rejected request read as success to callers checking for null (AR-027).
                 throw new ChangeFailed($decided);
             }
 

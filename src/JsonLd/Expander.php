@@ -215,18 +215,23 @@ final class Expander
 
             return $context->language !== null ? new Literal($value, null, $context->language) : Literal::string($value);
         }
-        if (\is_bool($value)) {
-            return Literal::boolean($value);
-        }
-        if (\is_int($value)) {
-            return Literal::integer($value);
-        }
         if (\is_float($value) && !is_finite($value)) {
             // json_decode turns 1e400 into INF; RDF has no lexical form for it (AR-023).
             throw JsonLdException::at($path, 'A number must be finite');
         }
-        if (\is_float($value)) {
-            return Literal::double($value);
+        if (\is_bool($value) || \is_int($value) || \is_float($value)) {
+            if ($coercion === Context::JSON_LD_ID) {
+                throw JsonLdException::at($path, 'An @id-coerced value must be an IRI string or a node object');
+            }
+            if ($coercion !== null) {
+                // A term's datatype coerces native values too (value expansion), not only strings (R7-003).
+                return $coercion === Literal::XSD_DOUBLE && !\is_bool($value) ? Literal::double((float) $value) : new Literal(self::lexical($value), $coercion);
+            }
+            if (\is_bool($value)) {
+                return Literal::boolean($value);
+            }
+
+            return \is_int($value) ? Literal::integer($value) : Literal::double($value);
         }
         if (!\is_array($value)) {
             throw JsonLdException::at($path, 'Unsupported JSON value of type ' . get_debug_type($value));
@@ -290,7 +295,9 @@ final class Expander
             return new Literal(self::lexical($raw), $context->expandIri($type, self::join($path, '@type'), vocabRelative: true));
         }
         if (\is_string($raw)) {
-            return $context->language !== null ? new Literal($raw, null, $context->language) : Literal::string($raw);
+            // An explicit value object without @language is a plain string; the context's default
+            // language applies to bare strings only (value expansion, R7-003).
+            return Literal::string($raw);
         }
         if (\is_bool($raw)) {
             return Literal::boolean($raw);

@@ -58,9 +58,9 @@ final class Rs256Test extends TestCase
         self::assertSame('partner-lh', $claims->subject());
         self::assertSame(['one-record'], $claims->audience());
         self::assertSame(self::AGENT, $claims->logisticsAgentUri());
-        self::assertSame($clock->now()->getTimestamp(), $claims->issuedAt());
-        self::assertSame($clock->now()->getTimestamp(), $claims->notBefore());
-        self::assertSame($clock->now()->getTimestamp() + 300, $claims->expiresAt());
+        self::assertSame((float) $clock->now()->getTimestamp(), $claims->issuedAt());
+        self::assertSame((float) $clock->now()->getTimestamp(), $claims->notBefore());
+        self::assertSame((float) ($clock->now()->getTimestamp() + 300), $claims->expiresAt());
         self::assertSame(str_repeat('42', 16), $claims->tokenId());
         self::assertSame('partner-lh', $claims->get('sub'));
     }
@@ -71,7 +71,7 @@ final class Rs256Test extends TestCase
         $claims = $this->verifier()->verify($token);
 
         self::assertSame(self::ISSUER, $claims->issuer());
-        self::assertSame((new FixedClock())->now()->getTimestamp() + 60, $claims->expiresAt());
+        self::assertSame((float) ((new FixedClock())->now()->getTimestamp() + 60), $claims->expiresAt());
     }
 
     /**
@@ -175,16 +175,70 @@ final class Rs256Test extends TestCase
         }
     }
 
-    public function testClaimsReadTimestampsLeniently(): void
+    public function testClaimsReadTimestampsAsNumericDateOrAbsoluteInstant(): void
     {
         $claims = new Claims(['exp' => '2026-10-02T12:00:00Z', 'nbf' => '1790000000', 'iat' => 1.5, 'aud' => ['x', 1, 'y'], 'iss' => 1]);
-        self::assertSame((new DateTimeImmutable('2026-10-02T12:00:00Z'))->getTimestamp(), $claims->expiresAt());
-        self::assertSame(1790000000, $claims->notBefore());
-        self::assertSame(1, $claims->issuedAt());
+        self::assertSame((float) (new DateTimeImmutable('2026-10-02T12:00:00Z'))->getTimestamp(), $claims->expiresAt());
+        self::assertSame(1790000000.0, $claims->notBefore());
+        self::assertSame(1.5, $claims->issuedAt(), 'a fractional NumericDate keeps its fraction (R7-005)');
         self::assertSame(['x', 'y'], $claims->audience());
         self::assertNull($claims->issuer());
-        self::assertNull((new Claims(['exp' => 'soon']))->expiresAt());
+        self::assertNull((new Claims([]))->expiresAt(), 'absent is null');
         self::assertNull((new Claims([Claims::LOGISTICS_AGENT_URI => '']))->logisticsAgentUri());
+        // Present but not a time: refused, never read as absent. A relative expression would get a new
+        // instant at every parse; a date without a zone is not an instant.
+        foreach (['soon', '+1 hour', 'now', '2026-10-02T12:00:00', '2026-13-40T00:00:00Z', ['invalid'], true, NAN] as $bad) {
+            try {
+                (new Claims(['exp' => $bad]))->expiresAt();
+                self::fail('exp ' . var_export($bad, true) . ' must be refused');
+            } catch (JwtException $e) {
+                self::assertSame(JwtException::INVALID_CLAIM, $e->reason);
+            }
+        }
+    }
+
+    /**
+     * A correctly signed token with arbitrary payload claims, as a misconfigured issuer might mint one.
+     *
+     * @param array<string, mixed> $payload
+     */
+    private function tokenWithPayload(array $payload): string
+    {
+        $segments = Jwk::base64UrlEncode(json_encode(['alg' => 'RS256', 'typ' => 'JWT'], JSON_THROW_ON_ERROR)) . '.' . Jwk::base64UrlEncode(json_encode($payload, JSON_THROW_ON_ERROR));
+        $key = openssl_pkey_get_private(TestKeys::pair()['private']);
+        self::assertNotFalse($key);
+        openssl_sign($segments, $signature, $key, OPENSSL_ALGO_SHA256);
+        self::assertIsString($signature);
+
+        return $segments . '.' . Jwk::base64UrlEncode($signature);
+    }
+
+    public function testR7005TimeClaimsFailClosed(): void
+    {
+        $clock = new FixedClock('2026-10-02T12:00:00Z');
+        $now = $clock->now()->getTimestamp();
+        $verifier = $this->verifier($clock);
+        $base = ['iss' => self::ISSUER, Claims::LOGISTICS_AGENT_URI => self::AGENT];
+
+        foreach ([['exp' => '+1 hour'], ['exp' => $now + 600, 'nbf' => ['invalid']], ['exp' => $now + 600, 'nbf' => 'yesterday']] as $claims) {
+            try {
+                $verifier->verify($this->tokenWithPayload($base + $claims));
+                self::fail('a malformed time claim must refuse the token: ' . var_export($claims, true));
+            } catch (JwtException $e) {
+                self::assertSame(JwtException::INVALID_CLAIM, $e->reason, var_export($claims, true));
+            }
+        }
+        // A fractional NumericDate is compared as a fraction, so exp = now + 0.9 is not expired, even without leeway.
+        $strict = new Rs256Verifier(new StaticKeyResolver([self::ISSUER => TestKeys::pair()['public']]), $clock, leewaySeconds: 0);
+        self::assertSame(self::AGENT, $strict->verify($this->tokenWithPayload($base + ['exp' => $now + 0.9]))->logisticsAgentUri());
+        try {
+            $strict->verify($this->tokenWithPayload($base + ['exp' => $now - 0.1]));
+            self::fail('expired');
+        } catch (JwtException $e) {
+            self::assertSame(JwtException::EXPIRED, $e->reason);
+        }
+        // The spec's own example writes exp as an ISO instant; that stays readable.
+        self::assertSame(self::AGENT, $verifier->verify($this->tokenWithPayload($base + ['exp' => '2026-10-02T12:10:00Z']))->logisticsAgentUri());
     }
 
     public function testSignerRefusesWeakOrInvalidKeys(): void

@@ -110,7 +110,7 @@ final class ExpanderTest extends TestCase
         self::assertEquals(Literal::integer(3), $get('count'));
         self::assertEquals(new Literal('Books', null, 'en-US'), $get('goodsDescription'), 'the default language applies to plain strings');
         self::assertEquals(new Literal('Abflug', null, 'de'), $get('eventName'));
-        self::assertEquals(new Literal('no tag', null, 'en-US'), $get('plain'), 'and to value objects without @type or @language');
+        self::assertEquals(Literal::string('no tag'), $get('plain'), 'an explicit value object is a plain string; the default language applies to bare strings only (R7-003)');
     }
 
     public function testContextTermCoercions(): void
@@ -326,5 +326,26 @@ final class ExpanderTest extends TestCase
         $context = ['cargo' => self::CARGO, '@base' => 'https://example/a/b'];
         self::assertSame('https://other.example/y', JsonLd::expand(['@context' => $context, '@id' => '//other.example/x/../y', '@type' => 'cargo:Piece'])->rootIri()?->value);
         self::assertSame('https://other.example/y?q=1#f', JsonLd::expand(['@context' => $context, '@id' => '//other.example/./y?q=1#f', '@type' => 'cargo:Piece'])->rootIri()?->value);
+    }
+
+    public function testR7003CoercionAppliesToNativeValuesAndValueObjectsTakeNoDefaultLanguage(): void
+    {
+        $context = ['cargo' => self::CARGO, '@language' => 'en', 'weight' => ['@id' => self::CARGO . 'numericalValue', '@type' => self::XSD . 'double'], 'count' => ['@id' => self::CARGO . 'count', '@type' => self::XSD . 'decimal']];
+        $doc = JsonLd::expand(['@context' => $context, '@id' => 'https://example/p', 'weight' => 20, 'count' => 3, 'cargo:goodsDescription' => ['@value' => 'plain'], 'cargo:eventName' => 'tagged']);
+        $p = new Iri('https://example/p');
+        self::assertEquals(Literal::double(20.0), $doc->graph->firstObject($p, self::CARGO . 'numericalValue'), 'a native number under a double-coerced term is a double');
+        self::assertEquals(new Literal('3', self::XSD . 'decimal'), $doc->graph->firstObject($p, self::CARGO . 'count'));
+        self::assertEquals(Literal::string('plain'), $doc->graph->firstObject($p, self::CARGO . 'goodsDescription'), 'an explicit value object without @language is a plain string');
+        self::assertEquals(new Literal('tagged', null, 'en'), $doc->graph->firstObject($p, self::CARGO . 'eventName'), 'a bare string takes the default language');
+    }
+
+    public function testR7004ATermNeverExpandsADocumentRelativeIdentifier(): void
+    {
+        $context = ['@base' => 'https://example.org/', 'target' => ['@id' => 'https://different.example/object'], 'link' => ['@id' => 'https://example.org/link', '@type' => '@id']];
+        $doc = JsonLd::expand(['@context' => $context, '@id' => 'https://example.org/root', 'https://example.org/link' => ['@id' => 'target'], 'link' => 'target', '@type' => 'target']);
+        $root = new Iri('https://example.org/root');
+        $links = array_map(static fn($t): string => $t instanceof Iri ? $t->value : '?', $doc->graph->objects($root, 'https://example.org/link'));
+        self::assertSame(['https://example.org/target'], array_values(array_unique($links)), 'an @id, bare or @id-coerced, resolves against @base; the term alias does not apply');
+        self::assertSame(['https://different.example/object'], array_map(static fn(Iri $t): string => $t->value, $doc->graph->typesOf($root)), 'a type is vocabulary-relative, so the alias does apply there');
     }
 }

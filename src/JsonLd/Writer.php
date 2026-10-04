@@ -210,7 +210,10 @@ final class Writer
             Literal::XSD_INTEGER => preg_match('/^(0|-?[1-9][0-9]*)$/', $literal->lexical) === 1 && (string) (int) $literal->lexical === $literal->lexical
                 ? (int) $literal->lexical
                 : null,
-            Literal::XSD_DOUBLE => is_numeric($literal->lexical) && Literal::formatDouble((float) $literal->lexical) === $literal->lexical
+            // A JSON number without a fractional part reads back as xsd:integer in any JSON-LD processor
+            // (object to RDF conversion), whatever PHP's zero-fraction flag does; an integral double is
+            // written as an explicit value object instead (R7-002).
+            Literal::XSD_DOUBLE => is_numeric($literal->lexical) && Literal::formatDouble((float) $literal->lexical) === $literal->lexical && floor((float) $literal->lexical) !== (float) $literal->lexical
                 ? (float) $literal->lexical
                 : null,
             default => null,

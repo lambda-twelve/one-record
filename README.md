@@ -12,11 +12,13 @@ A framework-agnostic PHP implementation of **IATA ONE Record**: the server side
 (a data holder publishing logistics objects to partners) and the client side
 (talking to other parties' ONE Record servers), as one Composer package.
 
-> **Status:** `1.0.0-beta1` is the first release: API 2.2.0 and 2.3.0 served
-> and consumed, compliance and NE:ONE interoperability green. Published on
-> [Packagist](https://packagist.org/packages/lambda-twelve/one-record) as a
-> pre-release. Public API changes are still allowed between betas and recorded
-> in the [changelog](CHANGELOG.md); the
+> **Status:** in beta on
+> [Packagist](https://packagist.org/packages/lambda-twelve/one-record): API
+> 2.2.0 and 2.3.0 served and consumed, compliance and NE:ONE interoperability
+> green, every release signed and tagged (the badges above show the current
+> one). Betas follow the review rounds of the Laravel and Drupal integrations
+> and of independent adversarial reviews; public API changes are still allowed
+> between betas and recorded in the [changelog](CHANGELOG.md). The
 > [roadmap](https://lambda-twelve.github.io/one-record/roadmap/) has the detail.
 
 ## What it supports

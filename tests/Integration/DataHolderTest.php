@@ -66,7 +66,7 @@ final class DataHolderTest extends ServerTestCase
         self::assertSame(['shipment' => PublishResult::UNCHANGED, 'piece' => PublishResult::UPDATED], $changed->outcomes);
         $read = $this->request('GET', substr($iris['piece']->value, \strlen(self::BASE)));
         self::assertSame('2', $read->getHeaderLine('Latest-Revision'));
-        self::assertSame(21.0, self::arr(self::json($read)['cargo:grossWeight'])['cargo:numericalValue']);
+        self::assertSame(['@type' => 'xsd:double', '@value' => '2.1E1'], self::arr(self::json($read)['cargo:grossWeight'])['cargo:numericalValue']);
         $revised = $this->dispatcher->of(LogisticsObjectRevised::class);
         self::assertCount(1, $revised);
         self::assertSame([Cargo::grossWeight], $revised[0]->changedProperties);

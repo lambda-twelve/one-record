@@ -7,11 +7,12 @@ side (a data holder publishing logistics objects to partners) and the
 Composer package with no framework dependency.
 
 !!! info "Release status"
-    `1.0.0-beta1` is the first release: API 2.2.0 and 2.3.0 served and
-    consumed, compliance and NE:ONE interoperability green. Published on
-    [Packagist](https://packagist.org/packages/lambda-twelve/one-record) as a
-    pre-release. Public API changes are still allowed between betas
-    and recorded in the [changelog](changelog.md); the [roadmap](roadmap.md)
+    In beta on [Packagist](https://packagist.org/packages/lambda-twelve/one-record):
+    API 2.2.0 and 2.3.0 served and consumed, compliance and NE:ONE
+    interoperability green, every release signed and tagged. Betas follow the
+    review rounds of the Laravel and Drupal integrations and of independent
+    adversarial reviews; public API changes are still allowed between betas
+    and recorded in the [changelog](changelog.md). The [roadmap](roadmap.md)
     shows what is done and what comes next.
 
 ## Who it is for

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace LambdaTwelve\OneRecord\Server\Endpoint;
 
+use LambdaTwelve\OneRecord\Api\RequestStatus;
 use LambdaTwelve\OneRecord\Change\Change;
 use LambdaTwelve\OneRecord\Server\ActionRequests;
 use LambdaTwelve\OneRecord\Server\Http\ContentNegotiation;
@@ -38,7 +39,8 @@ final class ChangeLogisticsObjectEndpoint extends AbstractEndpoint
 
         $requests = new ActionRequests($this->services);
         $created = $requests->create($change, $agent->iri);
-        if ($this->services->policy->decide($agent, Action::DecideActionRequest, $created->iri) === Decision::Allow) {
+        // Unless a creation listener decided it already (R7-001).
+        if ($created->status === RequestStatus::Pending && $this->services->policy->decide($agent, Action::DecideActionRequest, $created->iri) === Decision::Allow) {
             $requests->accept($created, $agent->iri);
         }
 

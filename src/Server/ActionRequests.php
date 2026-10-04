@@ -40,12 +40,15 @@ final class ActionRequests
         return $this->services->unitOfWork->run(function () use ($payload, $requestedBy): ActionRequest {
             $request = ActionRequest::create($this->services->config->actionRequestIri($this->services->ids->next()), $payload, $requestedBy, $this->services->clock->now());
             $this->services->actionRequests->save($request);
-            $this->services->dispatcher->dispatch(new ActionRequestCreated($request));
+            // The Pending notification is queued before any listener runs: a listener that decides the
+            // request synchronously must not get its decision's notification ahead of this one (R7-001).
             if ($request->notifyRequestStatusChange()) {
                 (new Fanout($this->services))->actionRequestStatusChanged($request);
             }
+            $this->services->dispatcher->dispatch(new ActionRequestCreated($request));
 
-            return $request;
+            // A listener may have decided already; callers get what is stored, not the Pending snapshot.
+            return $this->services->actionRequests->get($request->iri) ?? $request;
         });
     }
 
@@ -87,9 +90,7 @@ final class ActionRequests
                     }
                 }
             }
-            $this->announce($final, $previous);
-
-            return $final;
+            return $this->announce($final, $previous);
         });
     }
 
@@ -103,9 +104,8 @@ final class ActionRequests
             $this->assertTransition($request, RequestStatus::Rejected);
             $rejected = $request->withStatus(RequestStatus::Rejected, $this->services->clock->now(), $by, $errors);
             $this->transition($rejected, $request->status);
-            $this->announce($rejected, $request->status);
 
-            return $rejected;
+            return $this->announce($rejected, $request->status);
         });
     }
 
@@ -116,9 +116,8 @@ final class ActionRequests
             $this->assertTransition($request, RequestStatus::Acknowledged);
             $acknowledged = $request->withStatus(RequestStatus::Acknowledged, $this->services->clock->now(), $by);
             $this->transition($acknowledged, $request->status);
-            $this->announce($acknowledged, $request->status);
 
-            return $acknowledged;
+            return $this->announce($acknowledged, $request->status);
         });
     }
 
@@ -132,9 +131,8 @@ final class ActionRequests
             if ($request->type === ActionRequestType::AccessDelegation && $request->status === RequestStatus::Accepted) {
                 $this->services->delegations->revokeFrom($request->iri);
             }
-            $this->announce($revoked, $request->status);
 
-            return $revoked;
+            return $this->announce($revoked, $request->status);
         });
     }
 
@@ -148,9 +146,8 @@ final class ActionRequests
             $this->assertTransition($request, RequestStatus::Failed);
             $failed = $request->withStatus(RequestStatus::Failed, $this->services->clock->now(), null, $errors);
             $this->transition($failed, $request->status);
-            $this->announce($failed, $request->status);
 
-            return $failed;
+            return $this->announce($failed, $request->status);
         });
     }
 
@@ -183,6 +180,7 @@ final class ActionRequests
             return $failed;
         }
 
+        Deprecations::log($stored->object->graph, $stored->object->iri, $this->services->vocabulary, $this->services->logger);
         $this->services->dispatcher->dispatch(new LogisticsObjectRevised($stored, $accepted->iri, $result->changedProperties));
         (new Fanout($this->services))->logisticsObjectUpdated($stored, $result->changedProperties, $accepted->iri);
 
@@ -221,13 +219,19 @@ final class ActionRequests
     }
 
     /**
-     * Tells the host and the requester about a decision whose side effects are
-     * already in place; $previous is the status the request had before the
-     * decision, whatever intermediate state the store recorded on the way.
+     * Tells the requester and then the host about a decision whose side
+     * effects are already in place; $previous is the status the request had
+     * before the decision, whatever intermediate state the store recorded on
+     * the way. The notification is queued before the event, so a listener that
+     * advances the request again cannot put its notification ahead of this
+     * one; and since a listener may advance it, the stored request is what is
+     * returned (R7-001).
      */
-    private function announce(ActionRequest $request, RequestStatus $previous): void
+    private function announce(ActionRequest $request, RequestStatus $previous): ActionRequest
     {
-        $this->services->dispatcher->dispatch(new ActionRequestStatusChanged($request, $previous));
         (new Fanout($this->services))->actionRequestStatusChanged($request);
+        $this->services->dispatcher->dispatch(new ActionRequestStatusChanged($request, $previous));
+
+        return $this->services->actionRequests->get($request->iri) ?? $request;
     }
 }

@@ -114,7 +114,7 @@ abstract class AbstractEndpoint implements Endpoint
             $graph = $this->rewriteLocalLinks($graph, $atParameter, $root, $historicalRoot);
             $root = $historicalRoot;
         }
-        $context = new Context(['cargo' => \LambdaTwelve\OneRecord\Spec\Namespaces::CARGO, 'api' => \LambdaTwelve\OneRecord\Spec\Namespaces::API]);
+        $context = Context::oneRecord();
 
         return (new Writer())->write($graph, $root, $context);
     }

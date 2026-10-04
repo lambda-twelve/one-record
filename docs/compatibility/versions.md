@@ -18,8 +18,11 @@ fallback.
 - 2.3.0 additions that are purely additive (the optional bulk logistics-events
   endpoint, standardised error titles, 422 responses) are served regardless.
 - The data model is version-independent by specification: the server validates
-  against the newest ontology, and 3.3 is a superset of 3.2, so 3.2 payloads
-  validate unchanged. Terms deprecated in 3.3 are accepted and logged, never
+  against the newest *configured* data model version (`ServerConfig`'s
+  `validationModel()`; both versions by default, so 3.3), and 3.3 is a
+  superset of 3.2, so 3.2 payloads validate unchanged. A server configured
+  for 3.2 alone refuses 3.3-only terms. Terms deprecated in the newest
+  configured version are accepted and logged at notice level, never
   rejected.
 
 ## Client: negotiated per partner

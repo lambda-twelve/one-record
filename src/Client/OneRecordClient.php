@@ -19,6 +19,7 @@ use LambdaTwelve\OneRecord\Api\TopicType;
 use LambdaTwelve\OneRecord\Api\Verification;
 use LambdaTwelve\OneRecord\Change\Change;
 use LambdaTwelve\OneRecord\JsonLd\ExpandedDocument;
+use LambdaTwelve\OneRecord\JsonLd\Json;
 use LambdaTwelve\OneRecord\JsonLd\JsonLd;
 use LambdaTwelve\OneRecord\JsonLd\JsonLdException;
 use LambdaTwelve\OneRecord\JsonLd\Nodes;
@@ -476,7 +477,7 @@ final class OneRecordClient
         if ($body !== null) {
             $request = $request
                 ->withHeader('Content-Type', self::JSON_LD . '; version=' . $version->value)
-                ->withBody($this->streams->createStream(json_encode($body, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES)));
+                ->withBody($this->streams->createStream(Json::encode($body, false)));
         }
         foreach ($headers as $name => $value) {
             $request = $request->withHeader($name, $value);

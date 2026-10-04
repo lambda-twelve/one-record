@@ -62,6 +62,16 @@ final class DoublesTest extends TestCase
         self::assertSame(DeliveryVerdict::Reject, DeliveryVerdict::of(new ClientException('the client refuses to send a token to a foreign origin')), 'a sending-side defect is not transient');
         self::assertSame(DeliveryVerdict::Reject, DeliveryVerdict::of(new RuntimeException('anything else')));
 
+        // A request PSR-18 calls unusable cannot be repaired by sending it again (R7-008).
+        $request = new class ('missing Host header') extends RuntimeException implements \Psr\Http\Client\RequestExceptionInterface {
+            public function getRequest(): RequestInterface
+            {
+                throw new RuntimeException('not needed');
+            }
+        };
+        self::assertSame(DeliveryVerdict::Reject, DeliveryVerdict::of($request));
+        self::assertSame(DeliveryVerdict::Reject, DeliveryVerdict::of(new ClientException('POST failed: missing Host header', 0, $request)));
+
         // The SDK client wraps its causes; the verdict looks through the wrapper (drupal3.md, item 1).
         self::assertSame(DeliveryVerdict::Retry, DeliveryVerdict::of(new ClientException('POST https://partner.example/notifications failed: connection refused', 0, $network)));
         self::assertSame(DeliveryVerdict::Retry, DeliveryVerdict::of(new ClientException('wrapped twice', 0, new RuntimeException('once', 0, $http(503)))));

@@ -127,6 +127,28 @@ jobs:
         if: failure()
         run: docker compose -p one-record-interop -f tests/Interop/neone/docker-compose.yml logs --no-color | tail -200
 
+  consumer:
+    name: Consumer install without dev dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: json, openssl
+          coverage: none
+      - name: Install the package into an empty project
+        run: |
+          mkdir -p /tmp/consumer && cd /tmp/consumer
+          cat > composer.json <<JSON
+          {"name": "example/consumer", "minimum-stability": "dev", "prefer-stable": true,
+           "repositories": [{"type": "path", "url": "${GITHUB_WORKSPACE}", "options": {"symlink": false}}],
+           "require": {"lambda-twelve/one-record": "@dev", "nyholm/psr7": "^1.8"}}
+          JSON
+          composer install --no-dev --no-interaction --no-progress
+      - name: Smoke the runtime without the development dependencies
+        run: php "${GITHUB_WORKSPACE}/tools/consumer-smoke.php" /tmp/consumer/vendor/autoload.php
+
   vocabulary:
     name: Generated vocabulary is up to date
     runs-on: ubuntu-latest

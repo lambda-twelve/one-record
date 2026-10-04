@@ -64,7 +64,8 @@ final readonly class Services
     ) {
         $this->responder = new Responder($responses, $streams);
         $this->body = new RequestBody($config->maxBodyBytes);
-        $this->vocabulary = $vocabulary ?? Vocabulary::default();
+        // The newest configured data model is the validation ceiling, as ServerConfig says (D7-001).
+        $this->vocabulary = $vocabulary ?? Vocabulary::for($config->validationModel());
         $this->embeddedIds = $embeddedIds ?? new Uuid5EmbeddedIdMinter();
         $this->logger = $logger ?? new NullLogger();
         $this->ids = $ids ?? new UuidIdGenerator();

@@ -59,6 +59,7 @@ final class CreateLogisticsObjectEndpoint extends AbstractEndpoint
         } catch (StoreException $e) {
             throw HttpException::conflict('A logistics object with this URI already exists.', $iri->value);
         }
+        \LambdaTwelve\OneRecord\Server\Deprecations::log($stored->object->graph, $stored->object->iri, $this->services->vocabulary, $this->services->logger);
         $this->services->dispatcher->dispatch(new LogisticsObjectCreated($stored, $agent->iri));
         // No action request causes a creation; fan-out then names the subscription request (AR-021).
         (new Fanout($this->services))->logisticsObjectCreated($stored);

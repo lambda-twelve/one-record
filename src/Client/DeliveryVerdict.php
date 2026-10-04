@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace LambdaTwelve\OneRecord\Client;
 
 use Psr\Http\Client\ClientExceptionInterface;
+use Psr\Http\Client\RequestExceptionInterface;
 use Throwable;
 
 /**
@@ -12,8 +13,9 @@ use Throwable;
  * the same classification, so it lives here: transport failures and the
  * statuses that say "not now" (5xx, 408, 429) are retried with backoff,
  * whether they came from the notification itself or from fetching the token
- * for it; every other HTTP answer, and refused credentials, is final; anything
- * else is a defect on the sending side and not worth a retry either.
+ * for it; every other HTTP answer, refused credentials, and a request PSR-18
+ * reports as unusable are final; anything else is a defect on the sending
+ * side and not worth a retry either.
  *
  * Pass whatever you caught. The SDK client wraps transport failures in a
  * ClientException with the PSR exception as its cause, so the chain of
@@ -34,7 +36,12 @@ enum DeliveryVerdict
             if ($cause instanceof TokenEndpointException) {
                 return self::forStatus($cause->status);
             }
+            if ($cause instanceof RequestExceptionInterface) {
+                // PSR-18: the request itself is unusable; repeating it unchanged cannot help (R7-008).
+                return self::Reject;
+            }
             if ($cause instanceof ClientExceptionInterface) {
+                // A network failure, or a client that says only "failed": transient until proven otherwise.
                 return self::Retry;
             }
         }

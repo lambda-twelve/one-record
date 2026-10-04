@@ -22,8 +22,9 @@ final class ChangeFailed extends RuntimeException
     {
         $reasons = implode('; ', array_map(static fn(Error $e): string => $e->title . (($e->details[0]->message ?? null) !== null ? ' (' . $e->details[0]->message . ')' : ''), $request->errors));
         parent::__construct(\sprintf(
-            'The change to %s failed: %s',
+            'The change to %s was not applied (%s): %s',
             $request->logisticsObjects()[0]->value ?? 'the object',
+            $request->status->shortName(),
             $reasons === '' ? 'no details recorded' : $reasons,
         ));
     }

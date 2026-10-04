@@ -109,7 +109,7 @@ final class ChangeRequestsTest extends ServerTestCase
         self::assertSame('Fri, 02 Oct 2026 12:05:00 GMT', $read->getHeaderLine('Last-Modified'));
         $json = self::json($read);
         self::assertSame(2, $json['api:hasRevision']);
-        self::assertSame(25.0, self::arr($json['cargo:grossWeight'])['cargo:numericalValue']);
+        self::assertSame(['@type' => 'xsd:double', '@value' => '2.5E1'], self::arr($json['cargo:grossWeight'])['cargo:numericalValue'], 'an integral double is written with its datatype (R7-002)');
 
         $revised = $this->dispatcher->of(LogisticsObjectRevised::class);
         self::assertCount(1, $revised);

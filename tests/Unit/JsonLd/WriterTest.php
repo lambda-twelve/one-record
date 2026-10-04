@@ -59,11 +59,11 @@ final class WriterTest extends TestCase
         $written = JsonLd::compact($graph, $piece);
 
         self::assertSame([
-            '@context' => ['cargo' => self::CARGO, 'api' => 'https://onerecord.iata.org/ns/api#'],
+            '@context' => ['cargo' => self::CARGO, 'api' => 'https://onerecord.iata.org/ns/api#', 'xsd' => self::XSD],
             '@id' => $piece->value,
             '@type' => 'cargo:Piece',
             'cargo:coload' => false,
-            'cargo:eventDate' => ['@type' => self::XSD . 'dateTime', '@value' => '2023-04-01T10:38:01.000Z'],
+            'cargo:eventDate' => ['@type' => 'xsd:dateTime', '@value' => '2023-04-01T10:38:01.000Z'],
             'cargo:goodsDescription' => 'Books',
             'cargo:grossWeight' => [
                 '@type' => 'cargo:Value',
@@ -109,6 +109,7 @@ final class WriterTest extends TestCase
         $graph = new Graph([
             new Triple($s, new Iri(self::CARGO . 'a'), new Literal('20.0', self::XSD . 'double')),
             new Triple($s, new Iri(self::CARGO . 'b'), Literal::double(20.0)),
+            new Triple($s, new Iri(self::CARGO . 'g'), Literal::double(20.5)),
             new Triple($s, new Iri(self::CARGO . 'c'), new Literal('007', self::XSD . 'integer')),
             new Triple($s, new Iri(self::CARGO . 'd'), new Literal('1', self::XSD . 'boolean')),
             new Triple($s, new Iri(self::CARGO . 'e'), new Literal('x', null, 'de')),
@@ -117,7 +118,8 @@ final class WriterTest extends TestCase
         $written = (new Writer())->write($graph, $s, new Context(['cargo' => self::CARGO, 'xsd' => self::XSD]), includeContext: false);
 
         self::assertSame(['@type' => 'xsd:double', '@value' => '20.0'], $written['cargo:a']);
-        self::assertSame(20.0, $written['cargo:b']);
+        self::assertSame(['@type' => 'xsd:double', '@value' => '2.0E1'], $written['cargo:b'], 'an integral double as a JSON number would read back as xsd:integer (R7-002)');
+        self::assertSame(20.5, $written['cargo:g'], 'a fractional part keeps the double native');
         self::assertSame(['@type' => 'xsd:integer', '@value' => '007'], $written['cargo:c']);
         self::assertSame(['@type' => 'xsd:boolean', '@value' => '1'], $written['cargo:d']);
         self::assertSame(['@language' => 'de', '@value' => 'x'], $written['cargo:e']);

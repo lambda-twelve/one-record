@@ -18,8 +18,44 @@ it. From 1.0.0 on, breaking changes need a new major version.
   settings, in plain sentences, without constructing anything, for a host's
   status page on an install that is not configured yet. The constructor
   throws the first of them.
+- `tools/consumer-smoke.php` and a CI job that installs the package into an
+  empty project without development dependencies and exercises the runtime.
+- `Server\Deprecations` logs, at notice level, every deprecated term an
+  object carries when it is created or revised, as the compatibility guide
+  promised.
 
 ### Changed
+
+- `ActionRequests::create()` queues the Pending notification before
+  dispatching `ActionRequestCreated`, and every decision queues its
+  notification before its event, so a listener that decides a request
+  synchronously cannot put its decision's notification ahead of the state it
+  decided; `create()` and every decision return the stored request, which a
+  listener may have advanced. `DataHolder::change()` and the holder's HTTP
+  change path no longer decide a request a creation listener already decided;
+  `ChangeFailed` is also thrown when such a listener rejected it
+  (adversarial review 7, R7-001).
+- An integral `xsd:double` is written as an explicit value object, since a
+  JSON number without a fraction reads back as `xsd:integer` in any JSON-LD
+  processor; the client uses the package encoder (R7-002).
+- The expander applies a term's datatype coercion to native numbers and
+  booleans, and an explicit value object without `@language` is a plain
+  string under a default language (R7-003). A term definition never expands
+  a document-relative `@id` (R7-004).
+- JWT time claims are NumericDate with their fraction or an absolute RFC 3339
+  instant with a zone; anything else present is refused with
+  `JwtException::INVALID_CLAIM` rather than read as absent (R7-005).
+- A posted logistics event may name only the object it is posted on in
+  `cargo:eventFor`, however many values and in any order (R7-006).
+- Changes validate literals by each datatype's own grammar and against the
+  property's range, as the checked builder does (R7-007).
+- `DeliveryVerdict` rejects a request PSR-18 reports as unusable
+  (`RequestExceptionInterface`) instead of retrying it (R7-008).
+- The token endpoint refuses two client authentication methods in one
+  request and repeated form parameters with `invalid_request` (R7-009).
+- `Services` validates against the newest *configured* data model version
+  (`ServerConfig::validationModel()`), as the configuration documented; a
+  server configured for 3.2 alone refuses 3.3-only terms (D7-001).
 
 - `ActionRequestStore::save()` states its envelope: the server saves a
   request once and moves it on with `transition()`; a later `save()` under

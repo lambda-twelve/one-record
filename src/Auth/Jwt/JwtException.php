@@ -20,6 +20,7 @@ final class JwtException extends RuntimeException
     public const string NOT_YET_VALID = 'not_yet_valid';
     public const string AUDIENCE_MISMATCH = 'audience_mismatch';
     public const string MISSING_CLAIM = 'missing_claim';
+    public const string INVALID_CLAIM = 'invalid_claim';
 
     public function __construct(public readonly string $reason, string $message)
     {

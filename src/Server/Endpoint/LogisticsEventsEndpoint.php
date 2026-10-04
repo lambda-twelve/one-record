@@ -21,7 +21,6 @@ use LambdaTwelve\OneRecord\Server\Notification\Fanout;
 use LambdaTwelve\OneRecord\Server\Spi\Action;
 use LambdaTwelve\OneRecord\Server\Spi\Agent;
 use LambdaTwelve\OneRecord\Server\Spi\EventQuery;
-use LambdaTwelve\OneRecord\Spec\Namespaces;
 use LambdaTwelve\OneRecord\Vocabulary\Generated\Api;
 use LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo;
 use Psr\Http\Message\ResponseInterface;
@@ -70,7 +69,7 @@ final class LogisticsEventsEndpoint extends AbstractEndpoint
         $stored = $this->requireObject($id, $agent, Action::ReadLogisticsEvent);
         $query = $this->eventQuery(self::query($request));
         $events = $this->services->events->query($stored->object->iri, $query);
-        $context = new Context(['cargo' => Namespaces::CARGO, 'api' => Namespaces::API]);
+        $context = Context::oneRecord();
         $items = array_map(static fn(LogisticsEvent $e): array => $e->toJsonLd($context, includeContext: false), $events);
         $collectionIri = new Iri($stored->object->iri->value . '/logistics-events');
         $lastModified = $this->services->events->lastModified($stored->object->iri) ?? $stored->createdAt;
@@ -150,9 +149,14 @@ final class LogisticsEventsEndpoint extends AbstractEndpoint
                 throw new InvalidDocument(\sprintf('A logistics event does not accept %s.', $predicate), [\LambdaTwelve\OneRecord\Api\Error::of('Invalid resource', '400', \sprintf('A logistics event does not accept %s.', $predicate), $predicate)]);
             }
         }
-        $for = $event->graph->firstObject($event->iri, Cargo::eventFor);
-        if ($for instanceof Iri && !$for->equals($object)) {
-            throw new InvalidDocument('cargo:eventFor names another object.', [\LambdaTwelve\OneRecord\Api\Error::of('Invalid resource', '400', \sprintf('cargo:eventFor names %s but the event was posted on %s.', $for->value, $object->value), Cargo::eventFor)]);
+        // Every value, not the first one: RDF values are unordered, and an event is for one object (R7-006).
+        foreach ($event->graph->objects($event->iri, Cargo::eventFor) as $for) {
+            if (!$for instanceof Iri) {
+                throw new InvalidDocument('cargo:eventFor must reference a logistics object.', [\LambdaTwelve\OneRecord\Api\Error::of('Invalid resource', '400', 'cargo:eventFor must reference the logistics object the event was posted on.', Cargo::eventFor)]);
+            }
+            if (!$for->equals($object)) {
+                throw new InvalidDocument('cargo:eventFor names another object.', [\LambdaTwelve\OneRecord\Api\Error::of('Invalid resource', '400', \sprintf('cargo:eventFor names %s but the event was posted on %s.', $for->value, $object->value), Cargo::eventFor)]);
+            }
         }
     }
 }

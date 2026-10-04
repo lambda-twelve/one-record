@@ -40,7 +40,7 @@ final class LogisticsObjectReadTest extends ServerTestCase
         $weight = self::arr($body['cargo:grossWeight']);
         self::assertStringStartsWith('internal:', self::str($weight['@id'] ?? ''), 'embedded nodes carry the stable id the server minted');
         unset($weight['@id']);
-        self::assertSame(['@type' => 'cargo:Value', 'cargo:numericalValue' => 20.0, 'cargo:unit' => ['@id' => 'https://onerecord.iata.org/ns/code-lists/MeasurementUnitCode#KGM']], $weight);
+        self::assertSame(['@type' => 'cargo:Value', 'cargo:numericalValue' => ['@type' => 'xsd:double', '@value' => '2.0E1'], 'cargo:unit' => ['@id' => 'https://onerecord.iata.org/ns/code-lists/MeasurementUnitCode#KGM']], $weight);
 
         // The body is the stored object plus its revision properties, nothing else.
         $read = LogisticsObject::fromJsonLd($body);

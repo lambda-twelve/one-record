@@ -36,7 +36,7 @@ final readonly class Context
      */
     public static function oneRecord(): self
     {
-        return new self(['cargo' => Namespaces::CARGO, 'api' => Namespaces::API]);
+        return new self(['cargo' => Namespaces::CARGO, 'api' => Namespaces::API, 'xsd' => Namespaces::XSD]);
     }
 
     /**
@@ -138,7 +138,9 @@ final readonly class Context
         if (preg_match('/[\s<>"{}|\\^`]/', $value) === 1) {
             throw JsonLdException::at($path, \sprintf('"%s" is not a valid IRI', $value));
         }
-        if (isset($this->terms[$value])) {
+        // A term applies to keys, types and coerced values, never to a document-relative identifier:
+        // "target" as an @id is the IRI "target" against @base, whatever term "target" means (R7-004).
+        if ($vocabRelative && isset($this->terms[$value])) {
             return $this->terms[$value]['id'];
         }
         if (isset($this->prefixes[$value]) && $vocabRelative) {

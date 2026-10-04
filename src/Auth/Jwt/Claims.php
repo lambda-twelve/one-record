@@ -51,19 +51,28 @@ final readonly class Claims
         return [];
     }
 
-    public function expiresAt(): ?int
+    /**
+     * @throws JwtException when the claim is present but not a time
+     */
+    public function expiresAt(): ?float
     {
-        return self::timestamp($this->all['exp'] ?? null);
+        return self::timestamp($this->all['exp'] ?? null, 'exp');
     }
 
-    public function notBefore(): ?int
+    /**
+     * @throws JwtException when the claim is present but not a time
+     */
+    public function notBefore(): ?float
     {
-        return self::timestamp($this->all['nbf'] ?? null);
+        return self::timestamp($this->all['nbf'] ?? null, 'nbf');
     }
 
-    public function issuedAt(): ?int
+    /**
+     * @throws JwtException when the claim is present but not a time
+     */
+    public function issuedAt(): ?float
     {
-        return self::timestamp($this->all['iat'] ?? null);
+        return self::timestamp($this->all['iat'] ?? null, 'iat');
     }
 
     public function tokenId(): ?string
@@ -82,28 +91,39 @@ final readonly class Claims
     }
 
     /**
-     * RFC 7519 wants NumericDate; the spec's own example writes exp as an ISO
-     * string, so both are read.
+     * RFC 7519 wants NumericDate, kept with its fraction; the spec's own
+     * example writes exp as an ISO string, so an absolute RFC 3339 instant
+     * with a zone is read too. Nothing else: a relative expression would get
+     * a new instant at every parse from the process clock, and a present but
+     * malformed claim is a refusal, never "absent" (R7-005).
+     *
+     * @throws JwtException
      */
-    private static function timestamp(mixed $value): ?int
+    private static function timestamp(mixed $value, string $claim): ?float
     {
-        if (\is_int($value)) {
-            return $value;
+        if ($value === null) {
+            return null;
         }
-        if (\is_float($value)) {
-            return (int) $value;
-        }
-        if (\is_string($value) && $value !== '') {
-            if (preg_match('/^\d+$/', $value) === 1) {
-                return (int) $value;
+        if (\is_int($value) || \is_float($value)) {
+            if (!is_finite((float) $value)) {
+                throw new JwtException(JwtException::INVALID_CLAIM, \sprintf('The %s claim is not a time.', $claim));
             }
-            try {
-                return (new DateTimeImmutable($value))->getTimestamp();
-            } catch (Exception) {
-                return null;
+
+            return (float) $value;
+        }
+        if (\is_string($value)) {
+            if (preg_match('/^\d{1,12}(\.\d+)?$/', $value) === 1) {
+                return (float) $value;
+            }
+            if (preg_match('/^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/', $value, $m) === 1 && checkdate((int) $m[2], (int) $m[3], (int) $m[1])) {
+                try {
+                    return (float) (new DateTimeImmutable($value))->format('U.u');
+                } catch (Exception) {
+                    // falls through to the refusal
+                }
             }
         }
 
-        return null;
+        throw new JwtException(JwtException::INVALID_CLAIM, \sprintf('The %s claim is not a time.', $claim));
     }
 }

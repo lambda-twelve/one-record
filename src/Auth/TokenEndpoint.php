@@ -47,12 +47,20 @@ final class TokenEndpoint implements RequestHandlerInterface
         }
 
         $params = $this->formParameters($request);
+        if ($params === null) {
+            // RFC 6749 §3.2: parameters MUST NOT be included more than once.
+            return $this->error(400, 'invalid_request', 'A parameter was repeated.');
+        }
         if (($params['grant_type'] ?? null) !== 'client_credentials') {
             return $this->error(400, 'unsupported_grant_type', 'Only the client_credentials grant is supported.');
         }
 
-        // client_secret_basic takes precedence over client_secret_post, as RFC 6749 section 2.3.1 prefers it.
-        [$clientId, $secret, $viaBasic] = $this->basicCredentials($request) ?? [$params['client_id'] ?? null, $params['client_secret'] ?? null, false];
+        $basic = $this->basicCredentials($request);
+        if ($basic !== null && (isset($params['client_id']) || isset($params['client_secret']))) {
+            // RFC 6749 §2.3: more than one authentication method is invalid_request, not a precedence question (R7-009).
+            return $this->error(400, 'invalid_request', 'Authenticate with HTTP Basic or with client_id and client_secret in the body, not both.');
+        }
+        [$clientId, $secret, $viaBasic] = $basic ?? [$params['client_id'] ?? null, $params['client_secret'] ?? null, false];
         if (!\is_string($clientId) || $clientId === '' || !\is_string($secret) || $secret === '') {
             return $this->error(400, 'invalid_request', 'client_id and client_secret are required.');
         }
@@ -76,19 +84,37 @@ final class TokenEndpoint implements RequestHandlerInterface
     }
 
     /**
-     * @return array<string, string>
+     * The form parameters, read from the raw body when there is one so a
+     * repeated parameter is seen rather than collapsed by parse_str().
+     *
+     * @return ?array<string, string> null when a parameter is repeated
      */
-    private function formParameters(ServerRequestInterface $request): array
+    private function formParameters(ServerRequestInterface $request): ?array
     {
-        $parsed = $request->getParsedBody();
-        if (!\is_array($parsed) || $parsed === []) {
-            $parsed = [];
-            parse_str((string) $request->getBody(), $parsed);
+        $raw = (string) $request->getBody();
+        if ($raw !== '') {
+            $params = [];
+            foreach (explode('&', $raw) as $pair) {
+                if ($pair === '') {
+                    continue;
+                }
+                [$key, $value] = array_pad(explode('=', $pair, 2), 2, '');
+                $key = urldecode($key);
+                if (\array_key_exists($key, $params)) {
+                    return null;
+                }
+                $params[$key] = urldecode($value);
+            }
+
+            return $params;
         }
+        $parsed = $request->getParsedBody();
         $params = [];
-        foreach ($parsed as $key => $value) {
-            if (\is_string($value)) {
-                $params[(string) $key] = $value;
+        if (\is_array($parsed)) {
+            foreach ($parsed as $key => $value) {
+                if (\is_string($value)) {
+                    $params[(string) $key] = $value;
+                }
             }
         }
 

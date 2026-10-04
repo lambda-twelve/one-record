@@ -94,7 +94,7 @@ final class TokenEndpointAndAuthenticatorTest extends TestCase
         self::assertSame('or_lh', $claims->subject());
         self::assertSame(self::AGENT, $claims->logisticsAgentUri());
         self::assertSame(['one-record'], $claims->audience());
-        self::assertSame($this->clock->now()->getTimestamp() + 900, $claims->expiresAt());
+        self::assertSame((float) ($this->clock->now()->getTimestamp() + 900), $claims->expiresAt());
     }
 
     public function testAcceptsBasicAuthenticationAndParsedBodies(): void
@@ -174,5 +174,25 @@ final class TokenEndpointAndAuthenticatorTest extends TestCase
         self::assertNull($this->credentials->verify('or_lh', 'wrong'));
         self::assertNull($this->credentials->verify('unknown', 'lh-secret'));
         self::assertSame(self::AGENT, $this->credentials->verify('or_lh', 'lh-secret')?->value);
+    }
+
+    public function testR7009OneAuthenticationMethodAndNoRepeatedParameters(): void
+    {
+        // Valid Basic credentials for one client and body credentials for another: RFC 6749 §2.3 says invalid_request.
+        $response = $this->post(['grant_type' => 'client_credentials', 'client_id' => 'or_other', 'client_secret' => 'x'], ['Authorization' => 'Basic ' . base64_encode('or_lh:lh-secret')]);
+        self::assertSame(400, $response->getStatusCode());
+        self::assertSame('invalid_request', self::json($response)['error']);
+        // Basic plus a body client_id alone is still two methods.
+        self::assertSame(400, $this->post(['grant_type' => 'client_credentials', 'client_id' => 'or_lh'], ['Authorization' => 'Basic ' . base64_encode('or_lh:lh-secret')])->getStatusCode());
+
+        // A repeated parameter (§3.2) is refused rather than collapsed to its last value.
+        $raw = new ServerRequest('POST', 'https://1r.example.com/oauth/token', ['Content-Type' => 'application/x-www-form-urlencoded'], 'grant_type=client_credentials&client_id=or_lh&client_secret=wrong&client_secret=lh-secret');
+        $response = $this->endpoint->handle($raw);
+        self::assertSame(400, $response->getStatusCode());
+        self::assertSame('invalid_request', self::json($response)['error']);
+
+        // One method, once: still a token.
+        self::assertSame(200, $this->post(['grant_type' => 'client_credentials'], ['Authorization' => 'Basic ' . base64_encode('or_lh:lh-secret')])->getStatusCode());
+        self::assertSame(200, $this->post(['grant_type' => 'client_credentials', 'client_id' => 'or_lh', 'client_secret' => 'lh-secret'])->getStatusCode());
     }
 }

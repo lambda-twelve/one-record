@@ -669,4 +669,39 @@ final class ChangeBuilderAndApplierTest extends TestCase
             }
         }
     }
+
+    public function testR7007IllTypedLiteralsAreRefusedByGrammarAndByRange(): void
+    {
+        $uld = ObjectBuilder::of(Cargo::ULD)->set(Cargo::goodsDescription, 'Container')->build(new Iri('https://1r.example.com/logistics-objects/u1'));
+        $applier = new ChangeApplier();
+        $add = static fn(string $property, string $datatype, string $value): Change => new Change($uld->iri, 1, [Operation::add($uld->iri, new Iri($property), new OperationObject($datatype, $value))]);
+
+        foreach ([
+            'a fraction is not an integer' => $add(Cargo::numberOfDoors, Literal::XSD_INTEGER, '1.5'),
+            'an exponent is not a decimal' => $add(Cargo::numberOfDoors, Literal::XSD_DECIMAL, '1e3'),
+            'a string where the range wants an integer' => $add(Cargo::numberOfDoors, Literal::XSD_STRING, '2'),
+            'a double where the range wants an integer' => $add(Cargo::numberOfDoors, Literal::XSD_DOUBLE, '2.0'),
+        ] as $label => $change) {
+            try {
+                $applier->apply($uld, 1, $change);
+                self::fail($label);
+            } catch (ChangeRejected $e) {
+                self::assertSame('Invalid resource', $e->errors[0]->title, $label);
+            }
+        }
+        $result = $applier->apply($uld, 1, $add(Cargo::numberOfDoors, Literal::XSD_INTEGER, '2'));
+        $doors = $result->object->graph->firstObject($uld->iri, Cargo::numberOfDoors);
+        self::assertInstanceOf(Literal::class, $doors);
+        self::assertSame(['2', Literal::XSD_INTEGER], [$doors->lexical, $doors->datatype]);
+
+        // Grammars, independently of a property.
+        self::assertTrue(ChangeApplier::lexicallyValid(new Literal('-12', Literal::XSD_INTEGER)));
+        self::assertFalse(ChangeApplier::lexicallyValid(new Literal('12.0', Literal::XSD_INTEGER)));
+        self::assertTrue(ChangeApplier::lexicallyValid(new Literal('12.50', Literal::XSD_DECIMAL)));
+        self::assertFalse(ChangeApplier::lexicallyValid(new Literal('1E2', Literal::XSD_DECIMAL)));
+        self::assertTrue(ChangeApplier::lexicallyValid(new Literal('1E2', Literal::XSD_DOUBLE)));
+        self::assertTrue(ChangeApplier::lexicallyValid(new Literal('-INF', Literal::XSD_DOUBLE)));
+        self::assertFalse(ChangeApplier::lexicallyValid(new Literal('2026-02-30T00:00:00Z', Literal::XSD_DATETIME)));
+        self::assertTrue(ChangeApplier::lexicallyValid(new Literal('2026-10-02T24:00:00Z', Literal::XSD_DATETIME)));
+    }
 }
