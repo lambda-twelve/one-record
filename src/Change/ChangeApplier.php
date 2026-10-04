@@ -133,7 +133,7 @@ final class ChangeApplier
         foreach ([$before, $after] as $graph) {
             foreach ($graph->about($root) as $triple) {
                 $object = $triple->object;
-                if (($object instanceof Iri || $object instanceof BlankNode) && LogisticsObject::isEmbeddedId($object)) {
+                if (($object instanceof Iri || $object instanceof BlankNode) && LogisticsObject::isEmbeddedIn($graph, $object, $root)) {
                     $this->assignRootProperty($graph, $object, $triple->predicate->value, $rootPropertiesOf);
                 }
             }
@@ -172,7 +172,7 @@ final class ChangeApplier
         $rootPropertiesOf[$key][$property] = true;
         foreach ($graph->about($node) as $triple) {
             $object = $triple->object;
-            if (($object instanceof Iri || $object instanceof BlankNode) && LogisticsObject::isEmbeddedId($object)) {
+            if (($object instanceof Iri || $object instanceof BlankNode) && LogisticsObject::isEmbeddedIn($graph, $object)) {
                 $this->assignRootProperty($graph, $object, $property, $rootPropertiesOf);
             }
         }
@@ -196,7 +196,9 @@ final class ChangeApplier
         if ($subject->equals($root)) {
             return $subject;
         }
-        if (LogisticsObject::isEmbeddedId($subject) && $graph->about($subject) !== []) {
+        // Any node the stored graph describes is one of the object's embedded nodes, whatever id it
+        // carries (R11-001).
+        if (LogisticsObject::isEmbeddedIn($graph, $subject, $root)) {
             return $subject;
         }
         $errors[] = Error::of('Invalid resource', '400', \sprintf('"%s" is neither the logistics object nor one of its embedded objects.', $subject->value), $operation->predicate->value, $subject->value);
@@ -330,14 +332,14 @@ final class ChangeApplier
             $node = array_shift($queue);
             foreach ($graph->about($node) as $triple) {
                 $object = $triple->object;
-                if (($object instanceof BlankNode || ($object instanceof Iri && LogisticsObject::isEmbeddedId($object))) && !isset($reachable[$object->toNTriples()])) {
+                if (($object instanceof BlankNode || $object instanceof Iri) && !isset($reachable[$object->toNTriples()]) && LogisticsObject::isEmbeddedIn($graph, $object, $root)) {
                     $reachable[$object->toNTriples()] = true;
                     $queue[] = $object;
                 }
             }
         }
         foreach ($graph->subjects() as $subject) {
-            if (!isset($reachable[$subject->toNTriples()]) && LogisticsObject::isEmbeddedId($subject)) {
+            if (!isset($reachable[$subject->toNTriples()]) && !$subject->equals($root)) {
                 foreach ($graph->about($subject) as $triple) {
                     $graph->remove($triple);
                 }

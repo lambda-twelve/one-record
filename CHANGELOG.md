@@ -38,6 +38,14 @@ it. From 1.0.0 on, breaking changes need a new major version.
   splitting it into an object of its own is not implemented (spec question
   33); a change or an event may not introduce one.
 - An `xsd:date` offset is bounded to 14:00 like a `dateTime`'s (D10-002).
+- An embedded node a client identified itself (an `https:` or `urn:` id,
+  NE:ONE's `neone:` scheme) escaped validation on creation and on posted
+  events, could not be addressed by a change afterwards and was never
+  cleansed when unlinked. Every non-root subject of a graph is now an
+  embedded node: the validator judges it, `withEmbeddedIds()` gives it a
+  server-minted `internal:` id when the object is stored, and the change
+  applier addresses and cleanses it whatever id it carries (adversarial
+  review 11).
 
 ## [1.0.0-beta6] - 2026-10-04
 

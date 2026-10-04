@@ -260,7 +260,7 @@ final class ChangeBuilder
                 continue;
             }
             $object = $triple->object;
-            if (($object instanceof BlankNode || ($object instanceof Iri && LogisticsObject::isEmbeddedId($object))) && $toGraph->about($object) !== []) {
+            if (($object instanceof BlankNode || $object instanceof Iri) && LogisticsObject::isEmbeddedIn($toGraph, $object, $this->root)) {
                 $operations = [...$operations, ...$this->linkTo($toGraph, $blank, $triple->predicate, $object)];
             } else {
                 $operations[] = Operation::add($blank, $triple->predicate, $this->plainObject($toGraph, $triple->predicate, $object));
@@ -334,7 +334,7 @@ final class ChangeBuilder
             foreach ($graph->about($node) as $triple) {
                 $object = $triple->object;
                 $key = $object->toNTriples();
-                if (($object instanceof BlankNode || ($object instanceof Iri && LogisticsObject::isEmbeddedId($object))) && !isset($seen[$key]) && $graph->about($object) !== []) {
+                if (($object instanceof BlankNode || $object instanceof Iri) && !isset($seen[$key]) && LogisticsObject::isEmbeddedIn($graph, $object, $root)) {
                     $seen[$key] = true;
                     $found[$key] = $object;
                     $queue[] = $object;
@@ -356,7 +356,7 @@ final class ChangeBuilder
         $plain = [];
         $embedded = [];
         foreach ($terms as $term) {
-            if (($term instanceof BlankNode || ($term instanceof Iri && LogisticsObject::isEmbeddedId($term))) && $graph->about($term) !== []) {
+            if (($term instanceof BlankNode || $term instanceof Iri) && LogisticsObject::isEmbeddedIn($graph, $term, $this->root)) {
                 $embedded[] = $term;
             } else {
                 $plain[] = $term;
@@ -453,7 +453,7 @@ final class ChangeBuilder
         foreach ($graph->about($node) as $triple) {
             $into->add($triple);
             $object = $triple->object;
-            if (($object instanceof BlankNode || ($object instanceof Iri && LogisticsObject::isEmbeddedId($object))) && !isset($seen[$object->toNTriples()])) {
+            if (($object instanceof BlankNode || $object instanceof Iri) && !isset($seen[$object->toNTriples()]) && LogisticsObject::isEmbeddedIn($graph, $object, $this->root)) {
                 $this->collect($graph, $object, $into, $seen);
             }
         }

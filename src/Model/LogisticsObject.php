@@ -110,7 +110,7 @@ final readonly class LogisticsObject
     {
         $nodes = [];
         foreach ($this->graph->subjects() as $subject) {
-            if (!$subject->equals($this->iri) && self::isEmbeddedId($subject)) {
+            if (self::isEmbeddedIn($this->graph, $subject, $this->iri)) {
                 $nodes[$subject->toNTriples()] = $subject;
             }
         }
@@ -124,6 +124,39 @@ final readonly class LogisticsObject
         return $node instanceof BlankNode || $node->startsWith(Namespaces::EMBEDDED);
     }
 
+    /**
+     * Whether a node is embedded in a graph: a blank node, a node under the
+     * embedded-id scheme, or any other node that is described in this graph,
+     * that is, carries a triple other than its class, without being the root.
+     * The id a client chose for an embedded object (an https: or urn:
+     * identifier, NE:ONE's neone: scheme) makes it no less embedded (R11-001);
+     * withEmbeddedIds() replaces such ids when the object is stored. A typed
+     * link, a reference that states the class of the thing it points to and
+     * nothing else, remains a reference.
+     */
+    public static function isEmbeddedIn(Graph $graph, Iri|BlankNode $node, ?Iri $root = null): bool
+    {
+        if ($root !== null && $node->equals($root)) {
+            return false;
+        }
+
+        return self::isEmbeddedId($node) || self::isDescribedIn($graph, $node);
+    }
+
+    /**
+     * Whether the graph says more about a node than its class.
+     */
+    public static function isDescribedIn(Graph $graph, Iri|BlankNode $node): bool
+    {
+        foreach ($graph->about($node) as $triple) {
+            if ($triple->predicate->value !== Graph::RDF_TYPE) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function withIri(Iri $iri): self
     {
         return new self($iri, self::rename($this->graph, $this->iri, $iri));
@@ -135,23 +168,35 @@ final readonly class LogisticsObject
     }
 
     /**
-     * Give every blank node a stable embedded id (the spec's `internal:` scheme).
-     * A server does this once, when it first stores an object: from then on a
-     * change can name an embedded node, which a blank node cannot be.
+     * Give every embedded node a stable embedded id (the spec's `internal:`
+     * scheme): blank nodes, and nodes a client identified itself (an https: or
+     * urn: id, NE:ONE's neone: scheme), which are embedded all the same since
+     * they carry triples inside this object (R11-001). A server does this once,
+     * when it first stores an object: from then on a change can name an
+     * embedded node by the id the server minted, and nothing else in the
+     * stored graph is a subject but the object and its embedded nodes.
+     * References without triples of their own (other logistics objects,
+     * code-list members) are left as they are.
      */
     public function withEmbeddedIds(EmbeddedIdMinter $minter): self
     {
         $graph = $this->graph;
+        /** @var array<string, array{Iri|BlankNode, Iri}> $minted */
         $minted = [];
         foreach ($graph as $triple) {
             foreach ([$triple->subject, $triple->object] as $term) {
-                if ($term instanceof BlankNode && !isset($minted[$term->label])) {
-                    $minted[$term->label] = $minter->mint($this->iri, 'r1:' . $term->label);
+                if ($term instanceof BlankNode && !isset($minted[$term->toNTriples()])) {
+                    $minted[$term->toNTriples()] = [$term, $minter->mint($this->iri, 'r1:' . $term->label)];
                 }
             }
         }
-        foreach ($minted as $label => $iri) {
-            $graph = self::rename($graph, new BlankNode($label), $iri);
+        foreach ($graph->subjects() as $subject) {
+            if ($subject instanceof Iri && !self::isEmbeddedId($subject) && self::isEmbeddedIn($graph, $subject, $this->iri) && !isset($minted[$subject->toNTriples()])) {
+                $minted[$subject->toNTriples()] = [$subject, $minter->mint($this->iri, 'r1:' . $subject->value)];
+            }
+        }
+        foreach ($minted as [$from, $iri]) {
+            $graph = self::rename($graph, $from, $iri);
         }
 
         return $minted === [] ? $this : new self($this->iri, $graph);

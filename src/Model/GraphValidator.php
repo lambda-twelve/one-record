@@ -44,9 +44,11 @@ final class GraphValidator
     public function validate(Graph $graph, Iri|BlankNode $root, array $tolerated = [], bool $nestedLogisticsObjects = false): array
     {
         $violations = [];
+        // Every node the graph describes is an embedded node, whatever id it carries (R11-001); a typed
+        // link, which only states the class of what it points to, is judged through its range below.
         $subjects = [$root->toNTriples() => $root];
         foreach ($graph->subjects() as $subject) {
-            if (self::isEmbedded($subject)) {
+            if (!$subject->equals($root) && LogisticsObject::isEmbeddedIn($graph, $subject, $root instanceof Iri ? $root : null)) {
                 $subjects[$subject->toNTriples()] = $subject;
             }
         }
@@ -129,10 +131,5 @@ final class GraphValidator
         }
 
         return false;
-    }
-
-    private static function isEmbedded(Iri|BlankNode $node): bool
-    {
-        return $node instanceof BlankNode || LogisticsObject::isEmbeddedId($node);
     }
 }

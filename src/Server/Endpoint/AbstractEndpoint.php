@@ -135,7 +135,7 @@ abstract class AbstractEndpoint implements Endpoint
         }
         foreach ($graph->about($node) as $triple) {
             $object = $triple->object;
-            if (!$object instanceof Iri || isset($seen[$object->value]) || LogisticsObject::isEmbeddedId($object)) {
+            if (!$object instanceof Iri || isset($seen[$object->value]) || LogisticsObject::isEmbeddedIn($graph, $object, $node)) {
                 continue;
             }
             $relative = $this->services->config->relativePath($object);
@@ -173,7 +173,7 @@ abstract class AbstractEndpoint implements Endpoint
         $links = [];
         foreach ($graph as $triple) {
             $object = $triple->object;
-            if (!$object instanceof Iri || $object->equals($root) || LogisticsObject::isEmbeddedId($object)) {
+            if (!$object instanceof Iri || $object->equals($root) || LogisticsObject::isEmbeddedIn($graph, $object, $root)) {
                 continue;
             }
             $relative = $this->services->config->relativePath($object);

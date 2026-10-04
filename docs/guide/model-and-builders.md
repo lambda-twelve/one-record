@@ -75,8 +75,13 @@ Dangling references are refused before any URI is minted.
 
 Servers must give embedded objects ids that never change, because change
 requests address them. `EmbeddedIdMinter` (default `Uuid5EmbeddedIdMinter`,
-the spec's recommended `internal:<uuid5>` scheme) mints them when a blank
-node enters a stored object; they are kept in the stored graph from then on.
+the spec's recommended `internal:<uuid5>` scheme) mints them when an object
+is first stored, for every embedded node: a blank node, and equally a node the
+client identified itself (an `https:` or `urn:` id, NE:ONE's `neone:` scheme),
+since an id of its own makes a node no less embedded. The minted ids are kept
+in the stored graph from then on; a client learns them from its next read. A
+typed link, a reference that states only the class of what it points to, is
+not an embedded node and keeps its id.
 
 ## Building events
 

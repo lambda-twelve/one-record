@@ -127,4 +127,17 @@ final class GraphValidatorTest extends TestCase
         $fakeRoot = new Graph([new Triple($p, new Iri(Graph::RDF_TYPE), new Iri('https://example.com/Thing'))]);
         self::assertSame(['"https://example.com/Thing" is not a class of the ontology.'], self::messages($fakeRoot));
     }
+
+    public function testR11001AnEmbeddedNodeWithAnIdOfItsOwnIsValidatedLikeAnyOther(): void
+    {
+        $p = new Iri(self::PIECE);
+        foreach (['https://attacker.example/custom-dim-1', 'urn:uuid:7c9e6679-7425-40de-944b-e07fc1f90ae7', 'neone:17'] as $id) {
+            $node = new Iri($id);
+            $graph = new Graph([...self::piece(), new Triple($p, new Iri(Cargo::dimensions), $node), new Triple($node, new Iri(Graph::RDF_TYPE), new Iri('https://example.com/FakeDimensionsClass')), new Triple($node, new Iri('https://example.com/fakeProp'), Literal::string('x'))]);
+            self::assertSame(['"https://example.com/FakeDimensionsClass" is not a class of the ontology.', '"https://example.com/fakeProp" is not a property of the ontology.'], self::messages($graph), $id);
+
+            $valid = new Graph([...self::piece(), new Triple($p, new Iri(Cargo::dimensions), $node), new Triple($node, new Iri(Graph::RDF_TYPE), new Iri(Cargo::Dimensions)), new Triple($node, new Iri(Cargo::height), new Iri('internal:h')), new Triple(new Iri('internal:h'), new Iri(Graph::RDF_TYPE), new Iri(Cargo::Value)), new Triple(new Iri('internal:h'), new Iri(Cargo::numericalValue), Literal::string('tall'))]);
+            self::assertSame(['https://onerecord.iata.org/ns/cargo#numericalValue expects http://www.w3.org/2001/XMLSchema#double, got http://www.w3.org/2001/XMLSchema#string.'], self::messages($valid), 'and so is what hangs below it: ' . $id);
+        }
+    }
 }
