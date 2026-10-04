@@ -156,4 +156,26 @@ final class GraphValidatorTest extends TestCase
         // A typed link of a known class outside the range is still caught by the range.
         self::assertCount(1, self::messages($link(Cargo::dimensions, 'https://1r.example.com/logistics-objects/p2', Cargo::Piece)));
     }
+
+    public function testR13001ACodeListIsAClassForTheRangeCheck(): void
+    {
+        $p = new Iri(self::PIECE);
+        $units = 'https://onerecord.iata.org/ns/code-lists/MeasurementUnitCode';
+        $currencies = 'https://onerecord.iata.org/ns/code-lists/CurrencyCode';
+        $weight = static fn(Iri $unit, ?string $unitType): Graph => new Graph(array_filter([...self::piece(), new Triple($p, new Iri(Cargo::grossWeight), new Iri('internal:w')), new Triple(new Iri('internal:w'), new Iri(Graph::RDF_TYPE), new Iri(Cargo::Value)), new Triple(new Iri('internal:w'), new Iri(Cargo::numericalValue), Literal::double(1.0)), new Triple(new Iri('internal:w'), new Iri(Cargo::unit), $unit), $unitType === null ? null : new Triple($unit, new Iri(Graph::RDF_TYPE), new Iri($unitType))]));
+
+        // The reviewer's probes: a unit typed with the wrong list, and a code list where a class is expected.
+        self::assertSame([Cargo::unit . ' expects ' . $units . ', got ' . $currencies . '.'], self::messages($weight(new Iri($currencies . '#EUR'), $currencies)));
+        self::assertSame([Cargo::dimensions . ' expects ' . Cargo::Dimensions . ', got ' . $units . '.'], self::messages(new Graph([...self::piece(), new Triple($p, new Iri(Cargo::dimensions), new Iri($units . '#KGM')), new Triple(new Iri($units . '#KGM'), new Iri(Graph::RDF_TYPE), new Iri($units))])));
+        // The neighbour: an untyped member of the wrong list is judged by its IRI.
+        self::assertSame([Cargo::unit . ' expects ' . $units . ', got a member of ' . $currencies . '.'], self::messages($weight(new Iri($currencies . '#EUR'), null)));
+        // What must pass: the right list typed or untyped, a unit from elsewhere, and a member under a
+        // property whose range is a class rather than a list (eventCode expects a CodeListElement).
+        self::assertSame([], self::messages($weight(new Iri($units . '#KGM'), $units)));
+        self::assertSame([], self::messages($weight(new Iri($units . '#KGM'), null)));
+        self::assertSame([], self::messages($weight(new Iri('https://vocab.unece.org/rec20#KGM'), null)));
+        $e = new Iri('https://1r.example.com/logistics-objects/p1/logistics-events/e1');
+        $event = new Graph([new Triple($e, new Iri(Graph::RDF_TYPE), new Iri(Cargo::LogisticsEvent)), new Triple($e, new Iri(Cargo::eventCode), new Iri('https://onerecord.iata.org/ns/code-lists/StatusCode#DEP'))]);
+        self::assertSame([], array_map(static fn(GraphViolation $v): string => $v->message, (new GraphValidator(Vocabulary::default()))->validate($event, $e)));
+    }
 }

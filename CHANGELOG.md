@@ -54,6 +54,10 @@ it. From 1.0.0 on, breaking changes need a new major version.
   type-only node with an id of its own is a reference by design, not an
   embedded node: a change cannot describe it in place, and the guide says
   how to embed instead (R12-003).
+- A code list did not count as a class when a property's range was checked,
+  so a unit typed with the wrong list, or a code list where a class was
+  expected, passed (R13-001). It counts now, and an untyped member IRI of
+  the wrong list is caught by its IRI when the property expects a list.
 
 ## [1.0.0-beta6] - 2026-10-04
 

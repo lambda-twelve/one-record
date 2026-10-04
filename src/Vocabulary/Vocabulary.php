@@ -106,6 +106,17 @@ final class Vocabulary
     }
 
     /**
+     * The code list a member IRI (…/MeasurementUnitCode#KGM) belongs to, published
+     * code or not; null for an IRI outside the code-list namespace.
+     */
+    public function codeListOf(string $memberIri): ?CodeListInfo
+    {
+        [$list, $code] = $this->splitCodeIri($memberIri);
+
+        return $list === null || $code === null ? null : ($this->codeLists[$list] ?? null);
+    }
+
+    /**
      * True for a published member of a code list. Members of open lists that
      * are not published (an ISO currency, say) are not "known" but may still
      * be acceptable; callers decide with isOpenCodeList().

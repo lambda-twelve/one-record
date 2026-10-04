@@ -59,7 +59,7 @@ final class GraphValidator
             $types = array_map(static fn(Iri $t): string => $t->value, $graph->typesOf($subject));
             if (!$isRoot && !LogisticsObject::isEmbeddedIn($graph, $subject, $root instanceof Iri ? $root : null)) {
                 foreach ($types as $type) {
-                    if (!$this->vocabulary->isClass($type) && $this->vocabulary->codeList($type) === null) {
+                    if (!$this->isKnownClass($type)) {
                         $violations[] = new GraphViolation(\sprintf('"%s" is not a class of the ontology.', $type), Graph::RDF_TYPE, $subjectName);
                     }
                 }
@@ -109,20 +109,43 @@ final class GraphValidator
                     $violations[] = new GraphViolation(\sprintf('%s takes an object or reference, not a literal.', $predicate), $predicate, $subjectName);
                     continue;
                 }
-                // The target's classes, when the graph knows them, must be the range or below it. A reference
-                // to a node outside the graph (another logistics object, a code-list member) carries no classes
-                // here and is not judged; a class the ontology does not know is reported on the node itself.
+                // The target's classes, when the graph knows them, must be the range or below it; a code list
+                // is a class here as much as a data model class (R13-001). A class the ontology does not know
+                // is reported on the node itself. A reference to a node outside the graph carries no classes
+                // and is not judged, except that a code-list member must belong to a code list the property
+                // expects, when it expects one.
                 if (!$object instanceof Iri && !$object instanceof BlankNode) {
                     continue;
                 }
-                $targetTypes = array_values(array_filter(array_map(static fn(Iri $t): string => $t->value, $graph->typesOf($object)), fn(string $t): bool => $this->vocabulary->isClass($t)));
+                $targetTypes = array_values(array_filter(array_map(static fn(Iri $t): string => $t->value, $graph->typesOf($object)), $this->isKnownClass(...)));
                 if ($targetTypes !== [] && $info->ranges !== [] && !$this->withinRanges($targetTypes, $info->ranges)) {
                     $violations[] = new GraphViolation(\sprintf('%s expects %s, got %s.', $predicate, implode(' or ', $info->ranges), implode(', ', $targetTypes)), $predicate, $subjectName);
+                } elseif ($targetTypes === [] && $object instanceof Iri && ($list = $this->vocabulary->codeListOf($object->value)) !== null && $this->expectsACodeList($info->ranges) && !\in_array($list->iri, $info->ranges, true)) {
+                    $violations[] = new GraphViolation(\sprintf('%s expects %s, got a member of %s.', $predicate, implode(' or ', $info->ranges), $list->iri), $predicate, $subjectName);
                 }
             }
         }
 
         return $violations;
+    }
+
+    private function isKnownClass(string $iri): bool
+    {
+        return $this->vocabulary->isClass($iri) || $this->vocabulary->codeList($iri) !== null;
+    }
+
+    /**
+     * @param list<string> $ranges
+     */
+    private function expectsACodeList(array $ranges): bool
+    {
+        foreach ($ranges as $range) {
+            if ($this->vocabulary->codeList($range) !== null) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
