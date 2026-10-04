@@ -11,8 +11,9 @@ use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Server\Spi\EventQuery;
 use LambdaTwelve\OneRecord\Server\Spi\LogisticsEventStore;
 use LambdaTwelve\OneRecord\Server\Spi\StoreException;
+use LambdaTwelve\OneRecord\Server\Spi\Volatile;
 
-final class InMemoryLogisticsEventStore implements LogisticsEventStore
+final class InMemoryLogisticsEventStore implements LogisticsEventStore, Volatile
 {
     /** @var array<string, array<string, LogisticsEvent>> object IRI => event IRI => event */
     private array $events = [];

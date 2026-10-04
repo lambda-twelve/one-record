@@ -7,8 +7,9 @@ namespace LambdaTwelve\OneRecord\Server\InMemory;
 use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Server\Spi\AccessDelegationStore;
 use LambdaTwelve\OneRecord\Server\Spi\Grant;
+use LambdaTwelve\OneRecord\Server\Spi\Volatile;
 
-final class InMemoryAccessDelegationStore implements AccessDelegationStore
+final class InMemoryAccessDelegationStore implements AccessDelegationStore, Volatile
 {
     /** @var list<Grant> */
     private array $grants = [];

@@ -11,13 +11,14 @@ use LambdaTwelve\OneRecord\Api\TopicType;
 use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Server\Spi\ActionRequestStore;
 use LambdaTwelve\OneRecord\Server\Spi\SubscriptionStore;
+use LambdaTwelve\OneRecord\Server\Spi\Volatile;
 
 /**
  * Publisher side derived from the action requests (an accepted
  * SubscriptionRequest is a subscription); subscriber side from a list the
  * host fills with the subscriptions it wants to offer.
  */
-final class InMemorySubscriptionStore implements SubscriptionStore
+final class InMemorySubscriptionStore implements SubscriptionStore, Volatile
 {
     /** @var list<Subscription> */
     private array $offered = [];

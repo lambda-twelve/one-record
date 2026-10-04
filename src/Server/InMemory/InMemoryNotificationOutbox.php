@@ -8,8 +8,9 @@ use LambdaTwelve\OneRecord\Api\Notification;
 use LambdaTwelve\OneRecord\Rdf\Graph;
 use LambdaTwelve\OneRecord\Server\Spi\NotificationOutbox;
 use LambdaTwelve\OneRecord\Server\Spi\OutboundNotification;
+use LambdaTwelve\OneRecord\Server\Spi\Volatile;
 
-final class InMemoryNotificationOutbox implements NotificationOutbox
+final class InMemoryNotificationOutbox implements NotificationOutbox, Volatile
 {
     /** @var list<OutboundNotification> */
     private array $queue = [];

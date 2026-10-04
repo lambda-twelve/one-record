@@ -18,6 +18,7 @@ use LambdaTwelve\OneRecord\Server\Spi\LogisticsObjectStore;
 use LambdaTwelve\OneRecord\Server\Spi\NotificationOutbox;
 use LambdaTwelve\OneRecord\Server\Spi\SubscriptionStore;
 use LambdaTwelve\OneRecord\Server\Spi\UnitOfWork;
+use LambdaTwelve\OneRecord\Server\Spi\Volatile;
 use LambdaTwelve\OneRecord\Vocabulary\Vocabulary;
 use Psr\Clock\ClockInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
@@ -68,21 +69,35 @@ final readonly class Services
         $this->logger = $logger ?? new NullLogger();
         $this->ids = $ids ?? new UuidIdGenerator();
         $this->unitOfWork = $unitOfWork ?? new IdentityUnitOfWork();
-        if ($unitOfWork === null && !$this->storesAreInMemory()) {
-            // Without a transaction a failed operation leaves what it had already written. Only the
-            // in-memory stores have nothing to roll back; a host that persists must bind its own.
-            $this->logger->warning('No UnitOfWork was given and at least one store is not the SDK\'s in-memory one: operations will not be atomic. Bind your database transaction as the UnitOfWork.');
+        foreach ($this->checks() as $finding) {
+            $this->logger->warning($finding);
         }
     }
 
-    private function storesAreInMemory(): bool
+    /**
+     * What an operator should know about this wiring, in plain sentences; empty
+     * when nothing is amiss. Logged at construction and offered to the host's
+     * status page through ServerBuilder::check().
+     *
+     * @return list<string>
+     */
+    public function checks(): array
     {
-        foreach ([$this->objects, $this->events, $this->actionRequests, $this->subscriptions, $this->delegations, $this->outbox] as $store) {
-            if (!str_starts_with($store::class, __NAMESPACE__ . '\\InMemory\\')) {
-                return false;
+        $findings = [];
+        if ($this->unitOfWork instanceof IdentityUnitOfWork) {
+            // Without a transaction a failed operation leaves what it had already written. Only
+            // stores marked Volatile have nothing to roll back; a host that persists must bind its own.
+            $persistent = [];
+            foreach (['objects' => $this->objects, 'events' => $this->events, 'actionRequests' => $this->actionRequests, 'subscriptions' => $this->subscriptions, 'delegations' => $this->delegations, 'outbox' => $this->outbox] as $name => $store) {
+                if (!$store instanceof Volatile) {
+                    $persistent[] = $name . ' (' . $store::class . ')';
+                }
+            }
+            if ($persistent !== []) {
+                $findings[] = \sprintf('No UnitOfWork is bound and these stores are not marked Volatile: %s. Operations will not be atomic; bind your database transaction as the UnitOfWork (a decorator around an in-memory store should implement Spi\\Volatile).', implode(', ', $persistent));
             }
         }
 
-        return true;
+        return $findings;
     }
 }

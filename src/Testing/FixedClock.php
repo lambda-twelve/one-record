@@ -25,4 +25,12 @@ final class FixedClock implements ClockInterface
     {
         $this->now = $this->now->modify($interval);
     }
+
+    /**
+     * Jumps to an absolute instant: expiry boundaries, "a year later".
+     */
+    public function set(string|DateTimeImmutable $now): void
+    {
+        $this->now = $now instanceof DateTimeImmutable ? $now : new DateTimeImmutable($now);
+    }
 }

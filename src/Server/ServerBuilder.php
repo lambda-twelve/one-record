@@ -56,6 +56,18 @@ final class ServerBuilder
         return $routes;
     }
 
+    /**
+     * The wiring findings Services logs at construction, for a host's status
+     * page (Drupal's hook_requirements, Laravel's about command): empty when
+     * nothing is amiss.
+     *
+     * @return list<string>
+     */
+    public static function check(Services $services): array
+    {
+        return $services->checks();
+    }
+
     public static function build(Services $services): OneRecordServer
     {
         $router = new Router();

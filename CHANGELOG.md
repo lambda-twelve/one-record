@@ -12,7 +12,27 @@ it. From 1.0.0 on, breaking changes need a new major version.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- `Spi\Volatile`, a marker for stores with nothing to roll back; the
+  in-memory stores carry it and the identity-unit-of-work warning is decided
+  by it rather than by class name. `ServerBuilder::check(Services)` returns
+  the same findings for a host's status page.
+- `Testing\RacingActionRequestStore`: stages a decision lost to another
+  worker, outright or through a host callback that flips its own row first.
+- `Testing\FixedClock::set()` for jumping to an absolute instant.
+- `Client\DeliveryVerdict`: the retry classification every outbox worker
+  needs (`Retry` for transport failures, 5xx, 408 and 429; `Reject`
+  otherwise), and a guide section specifying the outbox row, claim and
+  outcome model two hosts converged on.
+
+### Changed
+
+- `ActionRequestStatusChanged` and the status notification fire after the
+  decision's side effects (grants, revision, revocation) are in place, once
+  per decision, with the status the request had before it; a change that
+  fails to apply reports `Failed` from `Pending` even though the store
+  recorded `Accepted` in between (Drupal integration review, round 2).
 
 ## [1.0.0-beta3] - 2026-10-04
 

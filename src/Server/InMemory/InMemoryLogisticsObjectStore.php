@@ -11,13 +11,14 @@ use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Server\Spi\LogisticsObjectStore;
 use LambdaTwelve\OneRecord\Server\Spi\StoredObject;
 use LambdaTwelve\OneRecord\Server\Spi\StoreException;
+use LambdaTwelve\OneRecord\Server\Spi\Volatile;
 
 /**
  * Every revision of every object in arrays. The reference implementation for
  * tests and bin/serve, and the behavioural contract a database-backed store
  * must match (see LogisticsObjectStoreContractTest).
  */
-final class InMemoryLogisticsObjectStore implements LogisticsObjectStore
+final class InMemoryLogisticsObjectStore implements LogisticsObjectStore, Volatile
 {
     /** @var array<string, list<array{object: LogisticsObject, at: DateTimeImmutable}>> IRI => revisions, index 0 = revision 1 */
     private array $revisions = [];

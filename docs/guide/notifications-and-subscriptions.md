@@ -32,11 +32,38 @@ foreach ($outbox->drain() as $outbound) {
 }
 ```
 
-Every `OutboundNotification` carries an `id`. Keep it with your delivery row:
-retry on 5xx, 408 and 429 with backoff, give up on other 4xx, and never send
-the same id twice as a new notification. Partners may use the id to
-deduplicate; sending it as an `Idempotency-Key` header is a reasonable
+Every `OutboundNotification` carries an `id`. Keep it with your delivery row
+and never send the same id twice as a new notification. Partners may use the
+id to deduplicate; sending it as an `Idempotency-Key` header is a reasonable
 convention until the spec names one.
+
+### What an outbox worker looks like
+
+Two hosts built this independently and converged on the same shape, so it is
+written down here as the specification to copy rather than another host's
+code.
+
+**Row.** One per `OutboundNotification`: the SDK id (unique), recipient,
+endpoint (resolved at enqueue time, may be null), event type, logistics
+object, the notification document as JSON-LD, created-at, attempts,
+next-attempt-at, delivered-at, failed-at, last error. The row is written
+inside the unit of work with the operation it announces (see the
+[SPI guide](spi.md#notificationoutbox)); hand it to the queue from the
+connection's after-commit hook, never from `enqueue()` itself.
+
+**Claim.** A worker takes a row by one conditional update: `attempts` goes up
+by one and `next-attempt-at` moves into the future (the lease), only if the
+row is still undelivered, unfailed and due. Exactly one worker wins. Record
+the outcome with the same attempt number the claim produced, so a worker
+that outlived its lease cannot overwrite a later attempt's result.
+
+**Outcome.** Deliver with the SDK client and classify a failure with
+`Client\DeliveryVerdict::of($throwable)`: `Retry` for transport failures and
+for 5xx, 408 and 429 (set `next-attempt-at` with backoff, give up as `failed`
+after N attempts), `Reject` for every other HTTP answer and for sending-side
+defects (set `failed-at` at once; an operator may requeue after fixing the
+cause). Success sets `delivered-at`. Delivery is at least once however
+carefully this is done; the recipient deduplicates on the id.
 
 ## Who gets what
 

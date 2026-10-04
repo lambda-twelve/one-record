@@ -70,12 +70,15 @@ final class ActionRequests
 
             // The compare-and-set on the status is the decision, and it succeeds exactly once; every
             // side effect (grants, a revision, notifications) comes after it, so a decision that lost
-            // the race writes nothing even under a host without a transactional unit of work.
-            $this->store($accepted, $request->status);
+            // the race writes nothing even under a host without a transactional unit of work. The
+            // event and the status notification come last, once the consequences are in place, so a
+            // listener reading the policy or the object sees the state after the decision.
+            $previous = $request->status;
+            $this->transition($accepted, $previous);
+            $final = $accepted;
             if ($request->payload instanceof Change) {
-                return $this->applyChange($accepted, $request->payload, $by);
-            }
-            if ($request->payload instanceof AccessDelegation) {
+                $final = $this->applyChange($accepted, $request->payload, $by);
+            } elseif ($request->payload instanceof AccessDelegation) {
                 foreach ($request->payload->delegates as $delegate) {
                     foreach ($request->payload->logisticsObjects as $object) {
                         $this->services->delegations->grant(new Grant($delegate, $object, $request->payload->permissions, $request->payload->expiresAt, $request->iri));
@@ -84,8 +87,9 @@ final class ActionRequests
                     }
                 }
             }
+            $this->announce($final, $previous);
 
-            return $accepted;
+            return $final;
         });
     }
 
@@ -98,7 +102,8 @@ final class ActionRequests
             $request = $this->current($request);
             $this->assertTransition($request, RequestStatus::Rejected);
             $rejected = $request->withStatus(RequestStatus::Rejected, $this->services->clock->now(), $by, $errors);
-            $this->store($rejected, $request->status);
+            $this->transition($rejected, $request->status);
+            $this->announce($rejected, $request->status);
 
             return $rejected;
         });
@@ -110,7 +115,8 @@ final class ActionRequests
             $request = $this->current($request);
             $this->assertTransition($request, RequestStatus::Acknowledged);
             $acknowledged = $request->withStatus(RequestStatus::Acknowledged, $this->services->clock->now(), $by);
-            $this->store($acknowledged, $request->status);
+            $this->transition($acknowledged, $request->status);
+            $this->announce($acknowledged, $request->status);
 
             return $acknowledged;
         });
@@ -122,10 +128,11 @@ final class ActionRequests
             $request = $this->current($request);
             $this->assertTransition($request, RequestStatus::Revoked);
             $revoked = $request->withStatus(RequestStatus::Revoked, $this->services->clock->now(), $by);
-            $this->store($revoked, $request->status);
+            $this->transition($revoked, $request->status);
             if ($request->type === ActionRequestType::AccessDelegation && $request->status === RequestStatus::Accepted) {
                 $this->services->delegations->revokeFrom($request->iri);
             }
+            $this->announce($revoked, $request->status);
 
             return $revoked;
         });
@@ -140,7 +147,8 @@ final class ActionRequests
             $request = $this->current($request);
             $this->assertTransition($request, RequestStatus::Failed);
             $failed = $request->withStatus(RequestStatus::Failed, $this->services->clock->now(), null, $errors);
-            $this->store($failed, $request->status);
+            $this->transition($failed, $request->status);
+            $this->announce($failed, $request->status);
 
             return $failed;
         });
@@ -155,7 +163,7 @@ final class ActionRequests
         $current = $this->services->objects->latest($change->logisticsObject);
         if ($current === null) {
             $failed = $accepted->withStatus(RequestStatus::Failed, $this->services->clock->now(), null, [Error::of('Resource not found', '404', 'The logistics object no longer exists.', null, $change->logisticsObject->value)]);
-            $this->store($failed, RequestStatus::Accepted);
+            $this->transition($failed, RequestStatus::Accepted);
 
             return $failed;
         }
@@ -165,12 +173,12 @@ final class ActionRequests
             $stored = $this->services->objects->saveRevision($result->object, $current->revision, $this->services->clock->now());
         } catch (ChangeRejected $e) {
             $failed = $accepted->withStatus(RequestStatus::Failed, $this->services->clock->now(), null, $e->errors);
-            $this->store($failed, RequestStatus::Accepted);
+            $this->transition($failed, RequestStatus::Accepted);
 
             return $failed;
         } catch (StoreException $e) {
             $failed = $accepted->withStatus(RequestStatus::Failed, $this->services->clock->now(), null, [Error::of('Conflict with Logistics Object revision number', '409', $e->getMessage(), null, $change->logisticsObject->value)]);
-            $this->store($failed, RequestStatus::Accepted);
+            $this->transition($failed, RequestStatus::Accepted);
 
             return $failed;
         }
@@ -204,9 +212,21 @@ final class ActionRequests
         return $this->services->actionRequests->get($request->iri) ?? throw StoreException::notFound($request->iri);
     }
 
-    private function store(ActionRequest $request, RequestStatus $previous): void
+    /**
+     * The compare-and-set that is the decision: it succeeds for exactly one worker.
+     */
+    private function transition(ActionRequest $request, RequestStatus $previous): void
     {
         $this->services->actionRequests->transition($request, $previous);
+    }
+
+    /**
+     * Tells the host and the requester about a decision whose side effects are
+     * already in place; $previous is the status the request had before the
+     * decision, whatever intermediate state the store recorded on the way.
+     */
+    private function announce(ActionRequest $request, RequestStatus $previous): void
+    {
         $this->services->dispatcher->dispatch(new ActionRequestStatusChanged($request, $previous));
         (new Fanout($this->services))->actionRequestStatusChanged($request);
     }

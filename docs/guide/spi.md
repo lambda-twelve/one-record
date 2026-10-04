@@ -124,6 +124,13 @@ savepoints). Independently of the unit, every decision on an action request
 is a compare-and-set on its status that happens before any side effect, so a
 decision that lost a race writes nothing even without a transaction.
 
+The warning is decided by the `Spi\Volatile` marker, not by class name: the
+in-memory stores implement it, and a decorator you put around one (a
+recording double, a queue in front of a test outbox) should implement it too
+to stay quiet. `ServerBuilder::check($services)` returns the same findings as
+a list of sentences, for a status page or health check where operators look
+(Drupal's `hook_requirements`, Laravel's `about`).
+
 ## Identifiers
 
 `Model\IriMinter` (`mint(localKey, types): Iri`) decides the URIs of objects
@@ -144,15 +151,25 @@ own should truncate the same way. It raises
 `ActionRequestCreated`, `ActionRequestStatusChanged` and
 `NotificationReceived`; a wrapper maps them to its own event system.
 
-Listeners run inside the unit of work, after the writes and before the
-notification fan-out: a listener that throws fails the operation and rolls
-it back with everything else. Listeners that do I/O of their own should
-queue it for after the commit rather than perform it in place.
+Listeners run inside the unit of work: a listener that throws fails the
+operation and rolls it back with everything else. Listeners that do I/O of
+their own should queue it for after the commit rather than perform it in
+place. Every event reports a state whose consequences are already written:
+`ActionRequestStatusChanged` fires after the grants, the revision or the
+revocation it decided are in place (and after `LogisticsObjectRevised` for an
+accepted change), so a listener that reads the policy or the object sees the
+world after the decision. It fires once per decision, with the status the
+request had before it; a change that was accepted and then failed to apply
+reports `Failed` from `Pending`, although the store recorded `Accepted` in
+between (a store validating transitions itself must allow `Accepted` to
+`Failed`).
 
 ## Wiring
 
 `Server\Services` is the bag of all of the above. `ServerBuilder::build(Services)`
-returns the PSR-15 handler; `InMemoryServer` is a worked example of the wiring.
+returns the PSR-15 handler, `ServerBuilder::check(Services)` the wiring
+findings worth showing an operator; `InMemoryServer` is a worked example of
+the wiring.
 
 ## Testing your implementation
 
@@ -171,7 +188,13 @@ trait on a bare `TestCase`, so the two cannot drift. Stores are expected to
 start empty, and every event handed to a store carries `cargo:eventDate`: the
 server refuses a posted event without one, and so does the checked builder.
 `Testing` also holds the doubles the SDK's own
-tests use: `FixedClock`, `HeaderAuthenticator`, `RecordingDispatcher`,
-`RecordingUnitOfWork`, `FakeHttpClient`, `InProcessHttpClient` (the SDK
-client against a PSR-15 handler in one process) and `ArrayCache`. PHPUnit is
+tests use: `FixedClock` (`advance()` and `set()`), `HeaderAuthenticator`,
+`RecordingDispatcher`, `RecordingUnitOfWork`, `FakeHttpClient`,
+`InProcessHttpClient` (the SDK client against a PSR-15 handler in one
+process), `ArrayCache` and `RacingActionRequestStore`. The last one stages the
+race every host must survive: wrap your request store, `arm()` it with a
+request, and the next decision on that request either loses its
+compare-and-set outright or first runs your callback (flip your own row to
+the competing status there) and then loses for real; the SDK's own test of the
+scenario uses it the same way. PHPUnit is
 a suggested dependency; nothing else in the package needs it.

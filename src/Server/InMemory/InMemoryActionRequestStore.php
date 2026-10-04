@@ -11,8 +11,9 @@ use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Server\Spi\ActionRequestStore;
 use LambdaTwelve\OneRecord\Server\Spi\AuditTrailQuery;
 use LambdaTwelve\OneRecord\Server\Spi\StoreException;
+use LambdaTwelve\OneRecord\Server\Spi\Volatile;
 
-final class InMemoryActionRequestStore implements ActionRequestStore
+final class InMemoryActionRequestStore implements ActionRequestStore, Volatile
 {
     /** @var array<string, ActionRequest> */
     private array $requests = [];
