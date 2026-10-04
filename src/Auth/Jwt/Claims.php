@@ -126,8 +126,10 @@ final readonly class Claims
             if (preg_match('/^\d{1,12}(\.\d+)?$/', $value) === 1) {
                 return (float) $value;
             }
-            // RFC 3339 §5.6: hours 00-23, minutes and seconds 00-59, an offset of at most 14:00. Checked
-            // before PHP sees the string, which would normalise 24:00 or +24:00 instead of refusing them.
+            // The string form is this SDK's ONE Record compatibility extension, deliberately a smaller
+            // subset than RFC 3339: hours 00-23, minutes and seconds 00-59 (no leap second), offsets up
+            // to 14:00 (the largest in use; the RFC's grammar would allow up to 23:59). Checked before
+            // PHP sees the string, which would normalise 24:00 or +24:00 instead of refusing them (D9-002).
             if (preg_match('/^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d+)?(Z|[+-](0\d|1[0-4]):([0-5]\d))$/', $value, $m) === 1
                 && checkdate((int) $m[2], (int) $m[3], (int) $m[1])
                 && !(($m[7] ?? '') === '14' && ($m[8] ?? '') !== '00')) {

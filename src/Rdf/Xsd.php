@@ -9,8 +9,12 @@ use LambdaTwelve\OneRecord\Spec\Namespaces;
 /**
  * What the SDK knows about XML Schema datatypes: which derive from which
  * (an xsd:int is an xsd:integer, which is an xsd:decimal), and each one's
- * lexical grammar with its bounds. The builder and the change applier judge
- * values by the same rules (R7-007, R8-002).
+ * lexical grammar with its bounds. The builder and the change applier share
+ * satisfies(), the range rule (R8-002). lexicallyValid() is applied by the
+ * change applier to every literal a change adds (R7-007); the builder trusts
+ * the lexical form of a Literal a caller supplies, so a successful build
+ * says the property accepts a value of that datatype, not that the supplied
+ * text is within the datatype's grammar or bounds (D9-001).
  */
 final class Xsd
 {

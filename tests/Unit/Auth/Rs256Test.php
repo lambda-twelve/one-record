@@ -356,7 +356,7 @@ final class Rs256Test extends TestCase
                 self::assertSame(JwtException::INVALID_CLAIM, $e->reason, var_export($claims, true));
             }
         }
-        self::assertSame(self::AGENT, $strict->verify($this->tokenWithPayload($base + ['exp' => '2026-10-06T12:00:00+14:00']))->logisticsAgentUri(), 'the largest offset RFC 3339 allows');
+        self::assertSame(self::AGENT, $strict->verify($this->tokenWithPayload($base + ['exp' => '2026-10-06T12:00:00+14:00']))->logisticsAgentUri(), 'the largest offset the accepted subset allows (RFC 3339 itself would allow more)');
         self::assertNull((new Claims(['exp' => 1]))->notBefore(), 'absent is still null');
     }
 }
