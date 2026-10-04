@@ -12,6 +12,10 @@ it. From 1.0.0 on, breaking changes need a new major version.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [1.0.0-beta3] - 2026-10-04
+
 ### Changed
 
 - Every decision on an action request stores its new status (the
