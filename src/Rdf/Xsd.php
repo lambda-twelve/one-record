@@ -122,7 +122,7 @@ final class Xsd
             self::NS . 'decimal' => preg_match('/^[+-]?(\d+(\.\d*)?|\.\d+)$/', $lexical) === 1,
             self::NS . 'double', self::NS . 'float' => preg_match('/^([+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?|[+-]?INF|NaN)$/', $lexical) === 1,
             self::NS . 'dateTime' => self::dateTimeValid($lexical),
-            self::NS . 'date' => preg_match('/^(-?\d{4,})-(\d{2})-(\d{2})(Z|[+-]\d{2}:\d{2})?$/', $lexical, $m) === 1 && checkdate((int) $m[2], (int) $m[3], abs((int) $m[1])),
+            self::NS . 'date' => preg_match('/^(-?\d{4,})-(\d{2})-(\d{2})(Z|[+-](\d{2}):(\d{2}))?$/', $lexical, $m) === 1 && checkdate((int) $m[2], (int) $m[3], abs((int) $m[1])) && self::offsetValid($m[5] ?? '', $m[6] ?? ''),
             self::NS . 'anyURI' => preg_match('/[\s<>"{}|\\^`]/', $lexical) !== 1,
             default => true,
         };
@@ -143,15 +143,21 @@ final class Xsd
         if ($hour > 24 || ($hour === 24 && ((int) $m[5] !== 0 || (int) $m[6] !== 0 || ltrim($m[7] ?? '', '.0') !== ''))) {
             return false;
         }
-        if (isset($m[10]) && $m[10] !== '') {
-            $offsetHours = (int) $m[10];
-            $offsetMinutes = (int) ($m[11] ?? '0');
-            if ($offsetHours > 14 || $offsetMinutes > 59 || ($offsetHours === 14 && $offsetMinutes !== 0)) {
-                return false;
-            }
-        }
+        return self::offsetValid($m[10] ?? '', $m[11] ?? '');
+    }
 
-        return true;
+    /**
+     * A timezone offset of at most 14:00 (XSD part 2, timezoneOffset); empty means none given.
+     */
+    private static function offsetValid(string $hours, string $minutes): bool
+    {
+        if ($hours === '') {
+            return true;
+        }
+        $h = (int) $hours;
+        $m = (int) $minutes;
+
+        return $h <= 14 && $m <= 59 && !($h === 14 && $m !== 0);
     }
 
     /**

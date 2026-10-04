@@ -13,6 +13,7 @@ use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Rdf\Literal;
 use LambdaTwelve\OneRecord\Rdf\Term;
 use LambdaTwelve\OneRecord\Rdf\Triple;
+use LambdaTwelve\OneRecord\Rdf\Xsd;
 use LambdaTwelve\OneRecord\Spec\Namespaces;
 
 /**
@@ -134,10 +135,15 @@ final class Comparer
             return $term;
         }
 
-        return match ($term->datatype) {
-            Literal::XSD_INTEGER => preg_match('/^[+-]?\d+$/', $term->lexical) === 1
+        // Every integer type is the same number; servers pick one or the other (NE:ONE writes xsd:int).
+        // Which types those are is Xsd's knowledge, not a second list here (R10-003).
+        if (Xsd::isIntegerType($term->datatype)) {
+            return preg_match('/^[+-]?\d+$/', $term->lexical) === 1
                 ? new Literal(self::canonicalInteger($term->lexical), Literal::XSD_INTEGER)
-                : $term,
+                : $term;
+        }
+
+        return match ($term->datatype) {
             Literal::XSD_DOUBLE => is_numeric($term->lexical)
                 ? new Literal(Literal::formatDouble((float) $term->lexical), Literal::XSD_DOUBLE)
                 : $term,
@@ -150,10 +156,6 @@ final class Comparer
                 '0' => Literal::boolean(false),
                 default => $term,
             },
-            // The bounded integer types are the same number; servers pick one or the other (NE:ONE writes xsd:int).
-            Namespaces::XSD . 'int', Namespaces::XSD . 'long', Namespaces::XSD . 'short', Namespaces::XSD . 'nonNegativeInteger', Namespaces::XSD . 'positiveInteger' => preg_match('/^[+-]?\d+$/', $term->lexical) === 1
-                ? new Literal(self::canonicalInteger($term->lexical), Literal::XSD_INTEGER)
-                : $term,
             Literal::XSD_DATETIME => self::canonicalDateTime($term),
             default => $term,
         };

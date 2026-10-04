@@ -7,6 +7,7 @@ namespace LambdaTwelve\OneRecord\Change;
 use LambdaTwelve\OneRecord\Api\Error;
 use LambdaTwelve\OneRecord\JsonLd\Comparer;
 use LambdaTwelve\OneRecord\Model\EmbeddedIdMinter;
+use LambdaTwelve\OneRecord\Model\GraphValidator;
 use LambdaTwelve\OneRecord\Model\LogisticsObject;
 use LambdaTwelve\OneRecord\Model\Uuid5EmbeddedIdMinter;
 use LambdaTwelve\OneRecord\Rdf\BlankNode;
@@ -18,7 +19,6 @@ use LambdaTwelve\OneRecord\Rdf\Triple;
 use LambdaTwelve\OneRecord\Rdf\Xsd;
 use LambdaTwelve\OneRecord\Vocabulary\Generated\Api;
 use LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo;
-use LambdaTwelve\OneRecord\Vocabulary\PropertyKind;
 use LambdaTwelve\OneRecord\Vocabulary\Vocabulary;
 
 /**
@@ -245,63 +245,43 @@ final class ChangeApplier
             }
         }
 
-        $graph->add(new Triple($subject, $operation->predicate, $term));
-        // A new embedded object carries its class in the operation's datatype (spec example C2).
-        if ($operation->object->isBlankNode() && $term instanceof Iri && $graph->typesOf($term) === [] && $this->vocabulary->isClass($operation->object->datatype)) {
-            $graph->add(new Triple($term, new Iri(Graph::RDF_TYPE), new Iri($operation->object->datatype)));
+        // A new embedded object carries its class in the operation's datatype (spec example C2); an
+        // unknown class, or a logistics object class, is refused here rather than left untyped (R10-001).
+        if ($operation->object->isBlankNode() && $term instanceof Iri && $graph->typesOf($term) === []) {
+            $class = $operation->object->datatype;
+            if (!$this->vocabulary->isClass($class)) {
+                $errors[] = Error::of('Invalid resource', '400', \sprintf('"%s" is not a class of the ontology.', $class), $predicate);
+
+                return;
+            }
+            if ($this->vocabulary->isLogisticsObjectClass($class)) {
+                $errors[] = Error::of('Invalid resource', '400', \sprintf('%s is a logistics object class; a logistics object has its own URI and is referred to, not embedded.', $class), $predicate);
+
+                return;
+            }
+            $graph->add(new Triple($subject, $operation->predicate, $term));
+            $graph->add(new Triple($term, new Iri(Graph::RDF_TYPE), new Iri($class)));
+
+            return;
         }
+        $graph->add(new Triple($subject, $operation->predicate, $term));
     }
 
     /**
-     * Every property the change touched must be one the ontology knows, one the
-     * node's classes accept, and of the right kind. Checked once the whole
-     * change is applied so the answer does not depend on operation order.
+     * The whole graph after the change, root and every embedded node, must
+     * satisfy the ontology: the same GraphValidator that judges a created
+     * object or a posted event, so a change cannot smuggle in what creation
+     * refuses (R10-001, R10-002, R10-004). Checked once the whole change is
+     * applied so the answer does not depend on operation order.
      *
      * @param array<string, Iri> $minted
      * @param list<Error> $errors
      */
     private function validateGraph(Graph $graph, Iri $root, array $minted, array &$errors): void
     {
-        $subjects = [$root, ...array_values($minted)];
-        foreach ($graph->subjects() as $subject) {
-            if ($subject instanceof Iri && LogisticsObject::isEmbeddedId($subject)) {
-                $subjects[] = $subject;
-            }
-        }
-        $seen = [];
-        foreach ($subjects as $subject) {
-            if (isset($seen[$subject->toNTriples()])) {
-                continue;
-            }
-            $seen[$subject->toNTriples()] = true;
-            $types = array_map(static fn(Iri $t): string => $t->value, $graph->typesOf($subject));
-            if ($types === []) {
-                continue;
-            }
-            foreach ($graph->about($subject) as $triple) {
-                $predicate = $triple->predicate->value;
-                if ($predicate === Graph::RDF_TYPE || \in_array($predicate, [Api::hasRevision, Api::hasLatestRevision], true)) {
-                    // The two revision properties are metadata a stored object may legitimately carry; no other API term is.
-                    continue;
-                }
-                $info = $this->vocabulary->property($predicate);
-                if ($info === null) {
-                    $errors[] = Error::of('Invalid resource', '400', \sprintf('"%s" is not a property of the ontology.', $predicate), $predicate, $subject->value);
-                    continue;
-                }
-                if (!$this->vocabulary->accepts($types, $predicate)) {
-                    $errors[] = Error::of('Invalid resource', '400', \sprintf('%s does not accept %s.', implode(', ', $types), $predicate), $predicate, $subject->value);
-                    continue;
-                }
-                if ($info->kind === PropertyKind::Datatype && !$triple->object instanceof Literal) {
-                    $errors[] = Error::of('Invalid resource', '400', \sprintf('%s takes a literal value.', $predicate), $predicate, $subject->value);
-                } elseif ($info->kind === PropertyKind::Object && $triple->object instanceof Literal) {
-                    $errors[] = Error::of('Invalid resource', '400', \sprintf('%s takes an object or reference, not a literal.', $predicate), $predicate, $subject->value);
-                } elseif ($triple->object instanceof Literal && !self::fitsRange($triple->object, $info->ranges)) {
-                    // The range is part of the property's meaning; the builder refuses this too (R7-007).
-                    $errors[] = Error::of('Invalid resource', '400', \sprintf('%s expects %s, got %s.', $predicate, implode(' or ', $info->ranges), $triple->object->datatype), $predicate, $subject->value);
-                }
-            }
+        // The two revision properties are metadata a stored object may legitimately carry; no other API term is.
+        foreach ((new GraphValidator($this->vocabulary))->validate($graph, $root, [Api::hasRevision, Api::hasLatestRevision]) as $violation) {
+            $errors[] = Error::of('Invalid resource', '400', $violation->message, $violation->property, $violation->subject);
         }
     }
 
@@ -336,19 +316,6 @@ final class ChangeApplier
     public static function lexicallyValid(Literal $literal): bool
     {
         return Xsd::lexicallyValid($literal);
-    }
-
-    /**
-     * Whether a literal's datatype satisfies a datatype property's range, as
-     * the checked builder judges it: the range, a type derived from it (an
-     * xsd:int where xsd:integer is expected), or a number where a double is
-     * expected (R8-002).
-     *
-     * @param list<string> $ranges
-     */
-    private static function fitsRange(Literal $literal, array $ranges): bool
-    {
-        return $literal->language !== null || Xsd::satisfies($literal->datatype, $ranges);
     }
 
     /**

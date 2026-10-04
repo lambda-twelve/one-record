@@ -137,17 +137,11 @@ final class LogisticsEventsEndpoint extends AbstractEndpoint
         if (array_filter($types, $isEvent) === []) {
             throw new InvalidDocument('The body is not a cargo:LogisticsEvent.', [\LambdaTwelve\OneRecord\Api\Error::of('Invalid resource', '400', \sprintf('Expected a cargo:LogisticsEvent, got %s.', $types === [] ? 'no @type' : implode(', ', $types)), '@type')]);
         }
-        foreach ($event->graph->about($event->iri) as $triple) {
-            $predicate = $triple->predicate->value;
-            if ($predicate === \LambdaTwelve\OneRecord\Rdf\Graph::RDF_TYPE) {
-                continue;
-            }
-            if ($vocabulary->property($predicate) === null) {
-                throw new InvalidDocument(\sprintf('"%s" is not a property of the ONE Record ontology.', $predicate), [\LambdaTwelve\OneRecord\Api\Error::of('Invalid resource', '400', \sprintf('"%s" is not a property of the ONE Record ontology.', $predicate), $predicate)]);
-            }
-            if (!$vocabulary->accepts($types, $predicate)) {
-                throw new InvalidDocument(\sprintf('A logistics event does not accept %s.', $predicate), [\LambdaTwelve\OneRecord\Api\Error::of('Invalid resource', '400', \sprintf('A logistics event does not accept %s.', $predicate), $predicate)]);
-            }
+        // The event and every node embedded in it (a location, an external reference) go through the
+        // same validator as a created object (D10-001).
+        $violations = (new \LambdaTwelve\OneRecord\Model\GraphValidator($vocabulary))->validate($event->graph, $event->iri);
+        if ($violations !== []) {
+            throw new InvalidDocument($violations[0]->message, [\LambdaTwelve\OneRecord\Api\Error::of('Invalid resource', '400', $violations[0]->message, $violations[0]->property, $violations[0]->subject)]);
         }
         // Every value, not the first one: RDF values are unordered, and an event is for one object (R7-006).
         foreach ($event->graph->objects($event->iri, Cargo::eventFor) as $for) {

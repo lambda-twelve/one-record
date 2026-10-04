@@ -571,10 +571,10 @@ final class ChangeBuilderAndApplierTest extends TestCase
             self::assertSame([Cargo::dimensions, Cargo::grossWeight], $result->changedProperties, 'both, whatever the insertion order');
         }
 
-        // Two paths under the same root property report it once; a cycle terminates.
-        $cyclic = $this->sharedValueGraph($iri);
-        $cyclic->add(new Triple($v, new Iri(Cargo::unit), new Iri('internal:d')));
-        $result = (new ChangeApplier(vocabulary: null))->apply(new LogisticsObject($iri, $cyclic), 1, $change);
+        // Two paths under the same root property (width and height both reach v) report it once. An embedded
+        // cycle cannot be built within the ontology's ranges any more, so termination is exercised by the shared
+        // node's two paths rather than by an invalid loop.
+        $result = (new ChangeApplier())->apply(new LogisticsObject($iri, $this->sharedValueGraph($iri)), 1, $change);
         self::assertSame([Cargo::dimensions], $result->changedProperties);
     }
 
@@ -730,5 +730,47 @@ final class ChangeBuilderAndApplierTest extends TestCase
         $doors = $result->object->graph->firstObject($uld->iri, Cargo::numberOfDoors);
         self::assertInstanceOf(Literal::class, $doors);
         self::assertSame($xsd . 'int', $doors->datatype, 'the value keeps the datatype it came with');
+    }
+
+    public function testR10ChangesCannotIntroduceUntypedOrMistypedEmbeddedNodes(): void
+    {
+        $piece = ObjectBuilder::of(Cargo::Piece)->set(Cargo::goodsDescription, 'Books')->build(new Iri('https://1r.example.com/logistics-objects/p1'));
+        $applier = new ChangeApplier();
+        $cases = [
+            'a class the ontology does not know' => [Operation::add($piece->iri, new Iri(Cargo::dimensions), new OperationObject('https://example.com/FakeClass', '_:b1')), Operation::add(new BlankNode('b1'), new Iri('https://example.com/fakeProp'), OperationObject::literal(Literal::string('injected')))],
+            'a logistics object as an embedded node' => [Operation::add($piece->iri, new Iri(Cargo::dimensions), new OperationObject(Cargo::Piece, '_:b1'))],
+            'a Person where Dimensions is expected' => [Operation::add($piece->iri, new Iri(Cargo::dimensions), new OperationObject(Cargo::Person, '_:b1')), Operation::add(new BlankNode('b1'), new Iri(Cargo::firstName), OperationObject::literal(Literal::string('Alice')))],
+        ];
+        foreach ($cases as $label => $operations) {
+            try {
+                $applier->apply($piece, 1, new Change($piece->iri, 1, $operations));
+                self::fail($label);
+            } catch (ChangeRejected $e) {
+                self::assertSame('Invalid resource', $e->errors[0]->title, $label);
+            }
+        }
+        // The spec's own C2 shape still works: a Value under grossWeight.
+        $result = $applier->apply($piece, 1, new Change($piece->iri, 1, [Operation::add($piece->iri, new Iri(Cargo::grossWeight), new OperationObject(Cargo::Value, '_:b1')), Operation::add(new BlankNode('b1'), new Iri(Cargo::numericalValue), OperationObject::literal(Literal::double(20.0)))]));
+        self::assertInstanceOf(Iri::class, $result->object->graph->firstObject($piece->iri, Cargo::grossWeight));
+    }
+
+    public function testR10003IntegerTypesCompareAsOneNumberInDeletesAndAdds(): void
+    {
+        $xsd = 'http://www.w3.org/2001/XMLSchema#';
+        $uld = ObjectBuilder::of(Cargo::ULD)->set(Cargo::numberOfDoors, Literal::integer(2))->build(new Iri('https://1r.example.com/logistics-objects/u1'));
+        $applier = new ChangeApplier();
+        foreach (['byte', 'unsignedInt', 'int', 'negativeInteger'] as $type) {
+            $literal = new Literal($type === 'negativeInteger' ? '-2' : '2', $xsd . $type);
+            if ($type !== 'negativeInteger') {
+                $result = $applier->apply($uld, 1, new Change($uld->iri, 1, [Operation::delete($uld->iri, new Iri(Cargo::numberOfDoors), OperationObject::literal($literal))]));
+                self::assertNull($result->object->graph->firstObject($uld->iri, Cargo::numberOfDoors), 'a delete spelled as ' . $type . ' matches the stored xsd:integer');
+                try {
+                    $applier->apply($uld, 1, new Change($uld->iri, 1, [Operation::add($uld->iri, new Iri(Cargo::numberOfDoors), OperationObject::literal($literal))]));
+                    self::fail('an add spelled as ' . $type . ' duplicates the stored value');
+                } catch (ChangeRejected $e) {
+                    self::assertStringContainsString('already present', $e->errors[0]->details[0]->message ?? '');
+                }
+            }
+        }
     }
 }

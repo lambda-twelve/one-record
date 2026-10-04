@@ -12,7 +12,32 @@ it. From 1.0.0 on, breaking changes need a new major version.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- `Model\GraphValidator`: one validator for a whole logistics-object or
+  event graph, root and every embedded node, used by `ChangeApplier`,
+  `POST /logistics-objects` and the logistics-events endpoints alike, so no
+  ingestion path accepts what another refuses (adversarial review 10).
+
+### Fixed
+
+- A change could introduce an embedded node of an unknown class, which then
+  escaped validation along with any property attached to it; a node of a
+  logistics object class; or a node of the wrong class for the property.
+  `ChangeApplier` refuses the class up front and the validator judges the
+  rest (R10-001, R10-002).
+- `Comparer` normalised only five of the twelve XSD integer types, so a
+  delete spelled as `xsd:byte` did not match a stored `xsd:integer` and an
+  add of the same number was not a duplicate; it now takes the integer
+  family from `Rdf\Xsd` (R10-003).
+- `POST /logistics-objects` validated the root's properties only; embedded
+  nodes, property kinds and ranges are now validated (R10-004). Posted
+  events are validated the same way, embedded locations included (D10-001).
+  One exception stays deliberate: a nested logistics object in a POST body
+  (the spec's own example A2) is still accepted and kept embedded, since
+  splitting it into an object of its own is not implemented (spec question
+  33); a change or an event may not introduce one.
+- An `xsd:date` offset is bounded to 14:00 like a `dateTime`'s (D10-002).
 
 ## [1.0.0-beta6] - 2026-10-04
 

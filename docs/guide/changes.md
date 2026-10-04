@@ -70,8 +70,16 @@ spec's rules for the holder:
 4. Subjects must be the object, one of its embedded objects, or a blank node
    that an ADD in the same change introduces.
 5. Deletes run first and must match an existing value (numbers compared by
-   value, so `20.0` deletes `2.0E1`); then adds, which must not duplicate an
-   existing value.
+   value, so `20.0` deletes `2.0E1` and an `xsd:int` deletes an
+   `xsd:integer`); then adds, which must not duplicate an existing value.
+6. The whole resulting graph, root and every embedded node, must satisfy the
+   ontology: `Model\GraphValidator`, the same validator that judges an object
+   created over HTTP and a posted event. An embedded node must declare a
+   class the ontology knows and that is not a logistics object class; every
+   property must exist, be accepted by the node's classes, be of the right
+   kind, and a literal must fit the range (XSD derivation included) and its
+   datatype's grammar; a node under an object property must be of the range
+   or a subclass when the graph knows its classes.
 6. Every added value is checked against the ontology: the property must be
    accepted by the subject's class, literals go to datatype properties and
    nodes to object properties, and booleans, numbers and date-times must be

@@ -82,20 +82,13 @@ final class CreateLogisticsObjectEndpoint extends AbstractEndpoint
         if (array_filter($types, static fn(string $t): bool => $vocabulary->isLogisticsObjectClass($t)) === []) {
             throw HttpException::badRequest(\sprintf('%s is not a logistics object class.', implode(', ', $types)), '@type', 'Invalid resource');
         }
-        foreach ($object->graph->about($object->iri) as $triple) {
-            $predicate = $triple->predicate->value;
-            if ($predicate === \LambdaTwelve\OneRecord\Rdf\Graph::RDF_TYPE) {
-                continue;
-            }
-            if (str_starts_with($predicate, \LambdaTwelve\OneRecord\Spec\Namespaces::API)) {
-                throw HttpException::badRequest(\sprintf('%s is set by the server, not the client.', $predicate), $predicate, 'Invalid resource');
-            }
-            if ($vocabulary->property($predicate) === null) {
-                throw HttpException::badRequest(\sprintf('"%s" is not a property of the ONE Record ontology.', $predicate), $predicate, 'Invalid resource');
-            }
-            if (!$vocabulary->accepts($types, $predicate)) {
-                throw HttpException::badRequest(\sprintf('%s does not accept %s.', implode(', ', $types), $predicate), $predicate, 'Invalid resource');
-            }
+        // Root and every embedded node, properties, kinds, ranges and grammars: the same validator that
+        // judges a change or a posted event (R10-004).
+        // A nested logistics object (the spec's example A2 posts a Company with a Person inside) is kept as
+        // an embedded node rather than refused or split into objects of its own: spec question 33.
+        $violations = (new \LambdaTwelve\OneRecord\Model\GraphValidator($vocabulary))->validate($object->graph, $object->iri, nestedLogisticsObjects: true);
+        if ($violations !== []) {
+            throw HttpException::badRequest($violations[0]->message, $violations[0]->property, 'Invalid resource');
         }
     }
 }
