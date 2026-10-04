@@ -12,6 +12,10 @@ it. From 1.0.0 on, breaking changes need a new major version.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [1.0.0-beta6] - 2026-10-04
+
 ### Added
 
 - `ServerConfig::problems(array $settings)`: what is wrong with a set of
