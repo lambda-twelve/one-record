@@ -168,7 +168,9 @@ final class DataHolder
         return $this->services->unitOfWork->run(function () use ($subscription): ActionRequest {
             $request = $this->requests->create($subscription, $subscription->subscriber);
 
-            return $this->requests->accept($request, $this->services->config->dataHolder);
+            // A creation listener may already have decided it (R8-001); its decision stands and the
+            // caller reads the status it got, instead of this method deciding a second time.
+            return $request->status === RequestStatus::Pending ? $this->requests->accept($request, $this->services->config->dataHolder) : $request;
         });
     }
 

@@ -14,6 +14,7 @@ use LambdaTwelve\OneRecord\Rdf\Graph;
 use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Rdf\Literal;
 use LambdaTwelve\OneRecord\Rdf\Triple;
+use LambdaTwelve\OneRecord\Rdf\Xsd;
 use LambdaTwelve\OneRecord\Spec\Namespaces;
 use LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo;
 use LambdaTwelve\OneRecord\Vocabulary\PropertyInfo;
@@ -262,20 +263,9 @@ final class ObjectBuilder
         if ($info->kind === PropertyKind::Object && $value instanceof Literal) {
             throw new ModelException(\sprintf('%s takes an object, reference or code-list IRI, not a literal.', self::short($info->iri)));
         }
-        if ($info->kind === PropertyKind::Datatype && $value instanceof Literal && $info->ranges !== [] && $value->language === null
-            && !\in_array($value->datatype, $info->ranges, true) && !self::compatible($value->datatype, $info->ranges)) {
+        if ($info->kind === PropertyKind::Datatype && $value instanceof Literal && $value->language === null && !Xsd::satisfies($value->datatype, $info->ranges)) {
             throw new ModelException(\sprintf('%s expects %s, got %s.', self::short($info->iri), implode(' or ', array_map(self::short(...), $info->ranges)), self::short($value->datatype)));
         }
-    }
-
-    /**
-     * xsd:integer satisfies xsd:double (a whole number is a number); nothing else is lenient.
-     *
-     * @param list<string> $ranges
-     */
-    private static function compatible(string $datatype, array $ranges): bool
-    {
-        return $datatype === Literal::XSD_INTEGER && (\in_array(Literal::XSD_DOUBLE, $ranges, true) || \in_array(Literal::XSD_DECIMAL, $ranges, true));
     }
 
     private static function short(string $iri): string

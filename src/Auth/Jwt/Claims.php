@@ -56,7 +56,7 @@ final readonly class Claims
      */
     public function expiresAt(): ?float
     {
-        return self::timestamp($this->all['exp'] ?? null, 'exp');
+        return $this->time('exp');
     }
 
     /**
@@ -64,7 +64,7 @@ final readonly class Claims
      */
     public function notBefore(): ?float
     {
-        return self::timestamp($this->all['nbf'] ?? null, 'nbf');
+        return $this->time('nbf');
     }
 
     /**
@@ -72,7 +72,21 @@ final readonly class Claims
      */
     public function issuedAt(): ?float
     {
-        return self::timestamp($this->all['iat'] ?? null, 'iat');
+        return $this->time('iat');
+    }
+
+    /**
+     * Absent is null; present, null included, must be a time (R8-005).
+     *
+     * @throws JwtException
+     */
+    private function time(string $claim): ?float
+    {
+        if (!\array_key_exists($claim, $this->all)) {
+            return null;
+        }
+
+        return self::timestamp($this->all[$claim], $claim);
     }
 
     public function tokenId(): ?string
@@ -99,11 +113,8 @@ final readonly class Claims
      *
      * @throws JwtException
      */
-    private static function timestamp(mixed $value, string $claim): ?float
+    private static function timestamp(mixed $value, string $claim): float
     {
-        if ($value === null) {
-            return null;
-        }
         if (\is_int($value) || \is_float($value)) {
             if (!is_finite((float) $value)) {
                 throw new JwtException(JwtException::INVALID_CLAIM, \sprintf('The %s claim is not a time.', $claim));
@@ -115,7 +126,11 @@ final readonly class Claims
             if (preg_match('/^\d{1,12}(\.\d+)?$/', $value) === 1) {
                 return (float) $value;
             }
-            if (preg_match('/^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/', $value, $m) === 1 && checkdate((int) $m[2], (int) $m[3], (int) $m[1])) {
+            // RFC 3339 §5.6: hours 00-23, minutes and seconds 00-59, an offset of at most 14:00. Checked
+            // before PHP sees the string, which would normalise 24:00 or +24:00 instead of refusing them.
+            if (preg_match('/^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d+)?(Z|[+-](0\d|1[0-4]):([0-5]\d))$/', $value, $m) === 1
+                && checkdate((int) $m[2], (int) $m[3], (int) $m[1])
+                && !(($m[7] ?? '') === '14' && ($m[8] ?? '') !== '00')) {
                 try {
                     return (float) (new DateTimeImmutable($value))->format('U.u');
                 } catch (Exception) {

@@ -704,4 +704,31 @@ final class ChangeBuilderAndApplierTest extends TestCase
         self::assertFalse(ChangeApplier::lexicallyValid(new Literal('2026-02-30T00:00:00Z', Literal::XSD_DATETIME)));
         self::assertTrue(ChangeApplier::lexicallyValid(new Literal('2026-10-02T24:00:00Z', Literal::XSD_DATETIME)));
     }
+
+    public function testR8002DerivedIntegerTypesSatisfyAnIntegerRangeWithinTheirBounds(): void
+    {
+        $xsd = 'http://www.w3.org/2001/XMLSchema#';
+        self::assertTrue(\LambdaTwelve\OneRecord\Rdf\Xsd::satisfies($xsd . 'int', [Literal::XSD_INTEGER]), 'an int is an integer');
+        self::assertTrue(\LambdaTwelve\OneRecord\Rdf\Xsd::satisfies($xsd . 'unsignedByte', [Literal::XSD_DECIMAL]));
+        self::assertTrue(\LambdaTwelve\OneRecord\Rdf\Xsd::satisfies($xsd . 'short', [Literal::XSD_DOUBLE]), 'a whole number is a number');
+        self::assertTrue(\LambdaTwelve\OneRecord\Rdf\Xsd::satisfies(Literal::XSD_DECIMAL, [Literal::XSD_DOUBLE]));
+        self::assertFalse(\LambdaTwelve\OneRecord\Rdf\Xsd::satisfies(Literal::XSD_INTEGER, [$xsd . 'int']), 'but not the other way round');
+        self::assertFalse(\LambdaTwelve\OneRecord\Rdf\Xsd::satisfies(Literal::XSD_DOUBLE, [Literal::XSD_INTEGER]));
+        self::assertFalse(\LambdaTwelve\OneRecord\Rdf\Xsd::satisfies(Literal::XSD_STRING, [Literal::XSD_INTEGER]));
+
+        self::assertTrue(ChangeApplier::lexicallyValid(new Literal('2147483647', $xsd . 'int')));
+        self::assertFalse(ChangeApplier::lexicallyValid(new Literal('2147483648', $xsd . 'int')), 'out of int\'s bounds');
+        self::assertFalse(ChangeApplier::lexicallyValid(new Literal('200', $xsd . 'byte')));
+        self::assertFalse(ChangeApplier::lexicallyValid(new Literal('-1', $xsd . 'nonNegativeInteger')));
+        self::assertTrue(ChangeApplier::lexicallyValid(new Literal('0', $xsd . 'nonNegativeInteger')));
+        self::assertFalse(ChangeApplier::lexicallyValid(new Literal('0', $xsd . 'positiveInteger')));
+        self::assertTrue(ChangeApplier::lexicallyValid(new Literal('99999999999999999999', Literal::XSD_INTEGER)), 'xsd:integer is unbounded');
+
+        // A change adding "2"^^xsd:int to an integer-ranged property is accepted (R8-002).
+        $uld = ObjectBuilder::of(Cargo::ULD)->set(Cargo::goodsDescription, 'Container')->build(new Iri('https://1r.example.com/logistics-objects/u1'));
+        $result = (new ChangeApplier())->apply($uld, 1, new Change($uld->iri, 1, [Operation::add($uld->iri, new Iri(Cargo::numberOfDoors), new OperationObject($xsd . 'int', '2'))]));
+        $doors = $result->object->graph->firstObject($uld->iri, Cargo::numberOfDoors);
+        self::assertInstanceOf(Literal::class, $doors);
+        self::assertSame($xsd . 'int', $doors->datatype, 'the value keeps the datatype it came with');
+    }
 }

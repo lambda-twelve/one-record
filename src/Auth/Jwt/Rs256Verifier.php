@@ -75,7 +75,10 @@ final class Rs256Verifier
             throw new JwtException(JwtException::BAD_SIGNATURE, 'The token signature does not verify against the issuer\'s keys.');
         }
 
-        $now = $this->clock->now()->getTimestamp();
+        // The clock's fraction counts as much as the claim's (R8-004).
+        $now = (float) $this->clock->now()->format('U.u');
+        // A present but malformed iat refuses the token too, although nothing compares it (R8-005).
+        $claims->issuedAt();
         $exp = $claims->expiresAt();
         if ($exp === null) {
             throw new JwtException(JwtException::MISSING_CLAIM, 'The token has no expiry (exp).');

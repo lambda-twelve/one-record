@@ -56,6 +56,21 @@ it. From 1.0.0 on, breaking changes need a new major version.
 - `Services` validates against the newest *configured* data model version
   (`ServerConfig::validationModel()`), as the configuration documented; a
   server configured for 3.2 alone refuses 3.3-only terms (D7-001).
+- **`Claims::expiresAt()`, `notBefore()` and `issuedAt()` return `?float`
+  instead of `?int`**, so a fractional NumericDate keeps its fraction. A
+  consumer that needs whole seconds decides its own rounding, for example
+  `(int) floor($claims->expiresAt())` before `DateTimeImmutable::setTimestamp()`;
+  under `strict_types` passing the float directly is a `TypeError`.
+- `DataHolder::subscribe()` honours a creation listener's decision instead of
+  accepting a second time (R8-001). Range checks follow XSD derivation
+  (`Rdf\Xsd`): an `xsd:int` satisfies an `xsd:integer` range, any integer or
+  decimal type satisfies a double, and bounded integer types are checked
+  against their bounds; the builder and the change applier share the rules
+  (R8-002). A native number or boolean under an `@id`-coerced term expands to
+  the value it is rather than being refused (R8-003). The JWT verifier
+  compares claims against the clock with its fraction (R8-004), refuses a
+  present `null` or malformed `nbf`/`iat`, and validates the hour, minute,
+  second and offset ranges of an RFC 3339 claim before parsing it (R8-005).
 
 - `ActionRequestStore::save()` states its envelope: the server saves a
   request once and moves it on with `transition()`; a later `save()` under

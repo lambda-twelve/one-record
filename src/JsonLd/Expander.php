@@ -220,10 +220,9 @@ final class Expander
             throw JsonLdException::at($path, 'A number must be finite');
         }
         if (\is_bool($value) || \is_int($value) || \is_float($value)) {
-            if ($coercion === Context::JSON_LD_ID) {
-                throw JsonLdException::at($path, 'An @id-coerced value must be an IRI string or a node object');
-            }
-            if ($coercion !== null) {
+            // @id coercion applies to strings; a native number or boolean under such a term is the
+            // value it is (value expansion, R8-003). A datatype coercion applies to natives too (R7-003).
+            if ($coercion !== null && $coercion !== Context::JSON_LD_ID) {
                 // A term's datatype coerces native values too (value expansion), not only strings (R7-003).
                 return $coercion === Literal::XSD_DOUBLE && !\is_bool($value) ? Literal::double((float) $value) : new Literal(self::lexical($value), $coercion);
             }

@@ -240,4 +240,48 @@ final class AdversarialRound7Test extends ServerTestCase
         (new DataHolder($server->services))->create($object);
         self::assertCount(1, array_filter($logger->notices, static fn(string $n): bool => str_starts_with($n, 'notice: ') && str_contains($n, 'totalDimensions') && str_contains($n, 'deprecated in data model 3.3')), implode("\n", $logger->notices));
     }
+
+    public function testR8001ThePublishersSubscriptionHonoursACreationListenersDecision(): void
+    {
+        $this->storePiece('piece-1', null);
+        $subscription = new \LambdaTwelve\OneRecord\Api\Subscription(new Iri(self::PARTNER), \LambdaTwelve\OneRecord\Api\TopicType::Type, Cargo::Piece, [\LambdaTwelve\OneRecord\Api\SubscriptionEventType::LogisticsObjectCreated], notifyRequestStatusChange: true);
+
+        $accepting = $this->servicesWithListener(static function (object $event, Services $services): void {
+            if ($event instanceof ActionRequestCreated) {
+                (new ActionRequests($services))->accept($event->request, new Iri(self::HOLDER));
+            }
+        });
+        $this->server->outbox->drain();
+        $request = (new DataHolder($accepting))->subscribe($subscription);
+        self::assertSame(RequestStatus::Accepted, $request->status, 'accepted once, by the listener; no IllegalTransition');
+        self::assertCount(1, $request->history, 'one transition, not two');
+        $types = array_map(static fn($n): string => $n->notification->eventType->name, $this->server->outbox->drain());
+        self::assertSame([NotificationEventType::SubscriptionRequestPending->name, NotificationEventType::SubscriptionRequestAccepted->name], $types);
+
+        $rejecting = $this->servicesWithListener(static function (object $event, Services $services): void {
+            if ($event instanceof ActionRequestCreated) {
+                (new ActionRequests($services))->reject($event->request, new Iri(self::HOLDER));
+            }
+        });
+        $request = (new DataHolder($rejecting))->subscribe($subscription);
+        self::assertSame(RequestStatus::Rejected, $request->status, 'the host\'s own listener said no; the caller reads that');
+    }
+
+    public function testR8002AnObjectStoredWithADerivedIntegerCanStillBeEdited(): void
+    {
+        $this->server->policy->addInternal(new Iri(self::HOLDER));
+        $body = json_encode(['@context' => ['cargo' => Cargo::NAMESPACE, 'xsd' => 'http://www.w3.org/2001/XMLSchema#'], '@type' => 'cargo:ULD', 'cargo:numberOfDoors' => ['@type' => 'xsd:int', '@value' => '2']], JSON_THROW_ON_ERROR);
+        $created = $this->request('POST', '/logistics-objects', self::HOLDER, [], $body);
+        self::assertSame(201, $created->getStatusCode(), (string) $created->getBody());
+        $iri = new Iri($created->getHeaderLine('Location'));
+        $stored = $this->server->objects->latest($iri);
+        self::assertNotNull($stored);
+
+        // An unrelated edit must not trip over the stored xsd:int (R8-002).
+        $edited = $stored->object->withGraph(new Graph([...$stored->object->graph, new Triple($iri, new Iri(Cargo::goodsDescription), Literal::string('Books'))]));
+        $decided = (new DataHolder($this->server->services))->update($edited, 'add a description');
+        self::assertNotNull($decided);
+        self::assertSame(RequestStatus::Accepted, $decided->status);
+        self::assertSame(2, $this->server->objects->latest($iri)?->revision);
+    }
 }

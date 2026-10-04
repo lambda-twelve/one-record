@@ -322,4 +322,41 @@ final class Rs256Test extends TestCase
 
         self::assertSame([], $resolver->publicKeys(self::ISSUER, null));
     }
+
+    public function testR8TimeClaimsAgainstAFractionalClockAndEveryMalformedShape(): void
+    {
+        $clock = new FixedClock('2026-10-04T12:00:00.800000Z');
+        $second = (new DateTimeImmutable('2026-10-04T12:00:00Z'))->getTimestamp();
+        $strict = new Rs256Verifier(new StaticKeyResolver([self::ISSUER => TestKeys::pair()['public']]), $clock, leewaySeconds: 0);
+        $base = ['iss' => self::ISSUER, Claims::LOGISTICS_AGENT_URI => self::AGENT];
+
+        // The clock's fraction counts: .2 is before .8 (R8-004).
+        try {
+            $strict->verify($this->tokenWithPayload($base + ['exp' => $second + 0.2]));
+            self::fail('expired six tenths ago');
+        } catch (JwtException $e) {
+            self::assertSame(JwtException::EXPIRED, $e->reason);
+        }
+        self::assertSame(self::AGENT, $strict->verify($this->tokenWithPayload($base + ['exp' => $second + 600, 'nbf' => $second + 0.2]))->logisticsAgentUri(), 'valid since six tenths ago');
+        self::assertSame(self::AGENT, $strict->verify($this->tokenWithPayload($base + ['exp' => $second + 0.9]))->logisticsAgentUri(), 'a tenth to go');
+
+        // Present but malformed, including null, including iat which nothing compares (R8-005).
+        foreach ([
+            ['exp' => $second + 600, 'nbf' => null],
+            ['exp' => $second + 600, 'iat' => ['invalid']],
+            ['exp' => '2026-10-04T24:00:00Z'],
+            ['exp' => '2026-10-06T12:00:00+24:00'],
+            ['exp' => '2026-10-06T12:00:00+14:30'],
+            ['exp' => '2026-10-06T12:00:60Z'],
+        ] as $claims) {
+            try {
+                $strict->verify($this->tokenWithPayload($base + $claims));
+                self::fail('must be refused: ' . var_export($claims, true));
+            } catch (JwtException $e) {
+                self::assertSame(JwtException::INVALID_CLAIM, $e->reason, var_export($claims, true));
+            }
+        }
+        self::assertSame(self::AGENT, $strict->verify($this->tokenWithPayload($base + ['exp' => '2026-10-06T12:00:00+14:00']))->logisticsAgentUri(), 'the largest offset RFC 3339 allows');
+        self::assertNull((new Claims(['exp' => 1]))->notBefore(), 'absent is still null');
+    }
 }

@@ -348,4 +348,14 @@ final class ExpanderTest extends TestCase
         self::assertSame(['https://example.org/target'], array_values(array_unique($links)), 'an @id, bare or @id-coerced, resolves against @base; the term alias does not apply');
         self::assertSame(['https://different.example/object'], array_map(static fn(Iri $t): string => $t->value, $doc->graph->typesOf($root)), 'a type is vocabulary-relative, so the alias does apply there');
     }
+
+    public function testR8003ANativeValueUnderAnIdCoercedTermIsTheValueItIs(): void
+    {
+        $context = ['number' => ['@id' => self::CARGO . 'numberOfDoors', '@type' => '@id'], 'flag' => ['@id' => self::CARGO . 'coload', '@type' => '@id'], 'ref' => ['@id' => self::CARGO . 'pieces', '@type' => '@id']];
+        $doc = JsonLd::expand(['@context' => $context, '@id' => 'https://example/u', 'number' => 20, 'flag' => false, 'ref' => 'https://example/p']);
+        $u = new Iri('https://example/u');
+        self::assertEquals(Literal::integer(20), $doc->graph->firstObject($u, self::CARGO . 'numberOfDoors'), '@id coercion applies to strings only (value expansion)');
+        self::assertEquals(Literal::boolean(false), $doc->graph->firstObject($u, self::CARGO . 'coload'));
+        self::assertEquals(new Iri('https://example/p'), $doc->graph->firstObject($u, self::CARGO . 'pieces'), 'and it does apply to the string');
+    }
 }

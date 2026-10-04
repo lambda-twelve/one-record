@@ -6,7 +6,6 @@ namespace LambdaTwelve\OneRecord\Change;
 
 use LambdaTwelve\OneRecord\Api\Error;
 use LambdaTwelve\OneRecord\JsonLd\Comparer;
-use LambdaTwelve\OneRecord\JsonLd\Nodes;
 use LambdaTwelve\OneRecord\Model\EmbeddedIdMinter;
 use LambdaTwelve\OneRecord\Model\LogisticsObject;
 use LambdaTwelve\OneRecord\Model\Uuid5EmbeddedIdMinter;
@@ -16,6 +15,7 @@ use LambdaTwelve\OneRecord\Rdf\Iri;
 use LambdaTwelve\OneRecord\Rdf\Literal;
 use LambdaTwelve\OneRecord\Rdf\Term;
 use LambdaTwelve\OneRecord\Rdf\Triple;
+use LambdaTwelve\OneRecord\Rdf\Xsd;
 use LambdaTwelve\OneRecord\Vocabulary\Generated\Api;
 use LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo;
 use LambdaTwelve\OneRecord\Vocabulary\PropertyKind;
@@ -331,43 +331,24 @@ final class ChangeApplier
     }
 
     /**
-     * The XSD lexical grammar of each datatype a change may carry; integer,
-     * decimal and double are not one grammar (R7-007). Datatypes not listed
-     * are not checked.
+     * The XSD lexical grammar of the literal's datatype, bounds included (R7-007); see Xsd.
      */
     public static function lexicallyValid(Literal $literal): bool
     {
-        $xsd = \LambdaTwelve\OneRecord\Spec\Namespaces::XSD;
-        $lexical = $literal->lexical;
-
-        return match ($literal->datatype) {
-            Literal::XSD_BOOLEAN => \in_array($lexical, ['true', 'false', '1', '0'], true),
-            Literal::XSD_INTEGER, $xsd . 'long', $xsd . 'int', $xsd . 'short', $xsd . 'byte' => preg_match('/^[+-]?\d+$/', $lexical) === 1,
-            $xsd . 'nonNegativeInteger', $xsd . 'unsignedLong', $xsd . 'unsignedInt' => preg_match('/^\+?\d+$/', $lexical) === 1,
-            $xsd . 'positiveInteger' => preg_match('/^\+?0*[1-9]\d*$/', $lexical) === 1,
-            Literal::XSD_DECIMAL => preg_match('/^[+-]?(\d+(\.\d*)?|\.\d+)$/', $lexical) === 1,
-            Literal::XSD_DOUBLE, $xsd . 'float' => preg_match('/^([+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?|[+-]?INF|NaN)$/', $lexical) === 1,
-            Literal::XSD_DATETIME => Nodes::parseDateTime($lexical) !== null,
-            $xsd . 'date' => preg_match('/^(-?\d{4,})-(\d{2})-(\d{2})(Z|[+-]\d{2}:\d{2})?$/', $lexical, $m) === 1 && checkdate((int) $m[2], (int) $m[3], abs((int) $m[1])),
-            Literal::XSD_ANYURI => preg_match('/[\s<>"{}|\\^`]/', $lexical) !== 1,
-            default => true,
-        };
+        return Xsd::lexicallyValid($literal);
     }
 
     /**
-     * Whether a literal's datatype satisfies a datatype property's range, as the
-     * checked builder judges it: the declared type, or an integer where a
-     * decimal or double is expected.
+     * Whether a literal's datatype satisfies a datatype property's range, as
+     * the checked builder judges it: the range, a type derived from it (an
+     * xsd:int where xsd:integer is expected), or a number where a double is
+     * expected (R8-002).
      *
      * @param list<string> $ranges
      */
     private static function fitsRange(Literal $literal, array $ranges): bool
     {
-        if ($ranges === [] || $literal->language !== null || \in_array($literal->datatype, $ranges, true)) {
-            return true;
-        }
-
-        return $literal->datatype === Literal::XSD_INTEGER && (\in_array(Literal::XSD_DOUBLE, $ranges, true) || \in_array(Literal::XSD_DECIMAL, $ranges, true));
+        return $literal->language !== null || Xsd::satisfies($literal->datatype, $ranges);
     }
 
     /**
