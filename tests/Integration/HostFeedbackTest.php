@@ -92,14 +92,19 @@ final class HostFeedbackTest extends ServerTestCase
 
     public function testAnIdentityUnitOfWorkInFrontOfAPersistentStoreIsWarnedAbout(): void
     {
-        $records = [];
-        $logger = new class ($records) extends AbstractLogger {
-            /** @param list<array{mixed, string}> $records */
-            public function __construct(private array &$records) {}
+        $logger = new class extends AbstractLogger {
+            /** @var list<array{string, string}> */
+            public array $records = [];
 
             public function log($level, string|Stringable $message, array $context = []): void
             {
-                $this->records[] = [$level, (string) $message];
+                $this->records[] = [\is_string($level) ? $level : 'other', (string) $message];
+            }
+
+            /** @return array{string, string} */
+            public function only(): array
+            {
+                return $this->records[0] ?? throw new \LogicException('nothing was logged');
             }
         };
         $persistent = new class implements NotificationOutbox {
@@ -110,12 +115,12 @@ final class HostFeedbackTest extends ServerTestCase
         $make = static fn(NotificationOutbox $outbox, ?RecordingUnitOfWork $unit) => new Services($s->services->config, $s->objects, $s->events, $s->actionRequests, $s->subscriptions, $s->delegations, $outbox, new HeaderAuthenticator(), $s->policy, $s->services->clock, $s->services->dispatcher, $factory, $factory, $logger, unitOfWork: $unit);
 
         $make(new InMemoryNotificationOutbox(), null);
-        self::assertSame([], $records, 'in-memory stores have nothing to roll back');
+        self::assertCount(0, $logger->records, 'in-memory stores have nothing to roll back');
         $make($persistent, new RecordingUnitOfWork());
-        self::assertSame([], $records, 'a bound unit of work is what is wanted');
+        self::assertCount(0, $logger->records, 'a bound unit of work is what is wanted');
         $make($persistent, null);
-        self::assertCount(1, $records);
-        self::assertSame('warning', $records[0][0]);
-        self::assertStringContainsString('UnitOfWork', $records[0][1]);
+        self::assertCount(1, $logger->records);
+        self::assertSame('warning', $logger->only()[0]);
+        self::assertStringContainsString('UnitOfWork', $logger->only()[1]);
     }
 }
