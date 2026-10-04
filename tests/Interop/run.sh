@@ -39,12 +39,39 @@ if [ -n "${NEONE_IMAGE:-}" ]; then
 else
     "${COMPOSE[@]}" up -d --build --wait
 fi
-if [ "${KEEP_NEONE:-0}" != "1" ]; then
-    trap '"${COMPOSE[@]}" down -v >/dev/null 2>&1 || true' EXIT
-fi
+# On failure, NE:ONE's log is the evidence; print it before the container goes.
+cleanup() {
+    status=$?
+    if [ "$status" -ne 0 ]; then
+        echo "--- NE:ONE log (last 200 lines) ---"
+        "${COMPOSE[@]}" logs --no-color 2>/dev/null | tail -200 || true
+    fi
+    if [ "${KEEP_NEONE:-0}" != "1" ]; then
+        "${COMPOSE[@]}" down -v >/dev/null 2>&1 || true
+    fi
+}
+trap cleanup EXIT
 
 export ONE_RECORD_NEONE_URL="http://${NEONE_PUBLIC_HOST}:${NEONE_PORT}"
 export ONE_RECORD_NEONE_ISSUER="$NEONE_ISSUER"
 export ONE_RECORD_NEONE_PRIVATE_KEY="$KEYS/private.pem"
+
+# Compose's --wait returns when Quarkus reports ready, which can be before the RDF store
+# answers requests: the first calls then fail with 500. Wait until the API itself answers
+# (any status below 500 will do; without a token that is 401) before running the suite.
+ready_url="http://127.0.0.1:${NEONE_PORT}/"
+for attempt in $(seq 1 60); do
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 -H 'Accept: application/ld+json' "$ready_url" || echo 000)"
+    if [ "$code" != "000" ] && [ "$code" -lt 500 ]; then
+        echo "NE:ONE answers ($code) after $attempt attempt(s)"
+        break
+    fi
+    if [ "$attempt" -eq 60 ]; then
+        echo "NE:ONE did not answer below 500 within 60 attempts (last: $code)" >&2
+        exit 1
+    fi
+    sleep 2
+done
+
 echo "NE:ONE at $ONE_RECORD_NEONE_URL"
 ${PHPUNIT:-vendor/bin/phpunit} --group interop --no-coverage "$@"
