@@ -68,5 +68,21 @@ final readonly class Services
         $this->logger = $logger ?? new NullLogger();
         $this->ids = $ids ?? new UuidIdGenerator();
         $this->unitOfWork = $unitOfWork ?? new IdentityUnitOfWork();
+        if ($unitOfWork === null && !$this->storesAreInMemory()) {
+            // Without a transaction a failed operation leaves what it had already written. Only the
+            // in-memory stores have nothing to roll back; a host that persists must bind its own.
+            $this->logger->warning('No UnitOfWork was given and at least one store is not the SDK\'s in-memory one: operations will not be atomic. Bind your database transaction as the UnitOfWork.');
+        }
+    }
+
+    private function storesAreInMemory(): bool
+    {
+        foreach ([$this->objects, $this->events, $this->actionRequests, $this->subscriptions, $this->delegations, $this->outbox] as $store) {
+            if (!str_starts_with($store::class, __NAMESPACE__ . '\\InMemory\\')) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

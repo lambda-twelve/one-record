@@ -12,7 +12,21 @@ it. From 1.0.0 on, breaking changes need a new major version.
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- Every decision on an action request stores its new status (the
+  compare-and-set) before any side effect: grants, the new revision,
+  notifications. A decision that loses the race against another worker now
+  writes nothing even under a host without a transactional unit of work; it
+  used to commit the grants first (Laravel integration review, round 2).
+- `Services` logs a warning when no `UnitOfWork` is given and a store is not
+  one of the SDK's in-memory ones, since operations are then not atomic.
+- The contract traits' fixture constants are prefixed (`CONTRACT_OBJECT`,
+  `CONTRACT_PARTNER`, ...) so a host test case with constants of its own can
+  use the traits.
+- `NotificationOutbox` and the SPI guide state when `enqueue()` runs relative
+  to the unit of work, that delivery is at least once, and that PSR-14
+  listeners run inside the unit of work before the fan-out.
 
 ## [1.0.0-beta2] - 2026-10-04
 

@@ -68,6 +68,10 @@ final class ActionRequests
             $now = $this->services->clock->now();
             $accepted = $request->withStatus(RequestStatus::Accepted, $now, $by);
 
+            // The compare-and-set on the status is the decision, and it succeeds exactly once; every
+            // side effect (grants, a revision, notifications) comes after it, so a decision that lost
+            // the race writes nothing even under a host without a transactional unit of work.
+            $this->store($accepted, $request->status);
             if ($request->payload instanceof Change) {
                 return $this->applyChange($accepted, $request->payload, $by);
             }
@@ -80,7 +84,6 @@ final class ActionRequests
                     }
                 }
             }
-            $this->store($accepted, $request->status);
 
             return $accepted;
         });
@@ -119,10 +122,10 @@ final class ActionRequests
             $request = $this->current($request);
             $this->assertTransition($request, RequestStatus::Revoked);
             $revoked = $request->withStatus(RequestStatus::Revoked, $this->services->clock->now(), $by);
+            $this->store($revoked, $request->status);
             if ($request->type === ActionRequestType::AccessDelegation && $request->status === RequestStatus::Accepted) {
                 $this->services->delegations->revokeFrom($request->iri);
             }
-            $this->store($revoked, $request->status);
 
             return $revoked;
         });
@@ -143,12 +146,16 @@ final class ActionRequests
         });
     }
 
+    /**
+     * Called once the request is stored as Accepted: applying the change may
+     * still fail, which moves the request on to Failed.
+     */
     private function applyChange(ActionRequest $accepted, Change $change, Iri $by): ActionRequest
     {
         $current = $this->services->objects->latest($change->logisticsObject);
         if ($current === null) {
             $failed = $accepted->withStatus(RequestStatus::Failed, $this->services->clock->now(), null, [Error::of('Resource not found', '404', 'The logistics object no longer exists.', null, $change->logisticsObject->value)]);
-            $this->store($failed, RequestStatus::Pending);
+            $this->store($failed, RequestStatus::Accepted);
 
             return $failed;
         }
@@ -158,17 +165,16 @@ final class ActionRequests
             $stored = $this->services->objects->saveRevision($result->object, $current->revision, $this->services->clock->now());
         } catch (ChangeRejected $e) {
             $failed = $accepted->withStatus(RequestStatus::Failed, $this->services->clock->now(), null, $e->errors);
-            $this->store($failed, RequestStatus::Pending);
+            $this->store($failed, RequestStatus::Accepted);
 
             return $failed;
         } catch (StoreException $e) {
             $failed = $accepted->withStatus(RequestStatus::Failed, $this->services->clock->now(), null, [Error::of('Conflict with Logistics Object revision number', '409', $e->getMessage(), null, $change->logisticsObject->value)]);
-            $this->store($failed, RequestStatus::Pending);
+            $this->store($failed, RequestStatus::Accepted);
 
             return $failed;
         }
 
-        $this->store($accepted, RequestStatus::Pending);
         $this->services->dispatcher->dispatch(new LogisticsObjectRevised($stored, $accepted->iri, $result->changedProperties));
         (new Fanout($this->services))->logisticsObjectUpdated($stored, $result->changedProperties, $accepted->iri);
 

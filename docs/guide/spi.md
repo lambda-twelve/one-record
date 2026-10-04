@@ -94,21 +94,35 @@ replace it for rules the grant model cannot express.
 ### `NotificationOutbox`
 
 `enqueue(OutboundNotification)`. The server never sends HTTP itself: it queues
-`{recipient, notification, createdAt}` and the host delivers, through a queue
-worker and its own egress rules, typically with the SDK's client.
+`{id, recipient, notification, createdAt}` and the host delivers, through a
+queue worker and its own egress rules, typically with the SDK's client.
 `OutboundNotification::suggestedEndpoint()` derives the recipient's
 `/notifications` URL from its agent URI; a host may know better.
+
+`enqueue()` runs inside the unit of work, next to the writes it announces.
+Hand the row to your queue only once that unit has committed (a database
+after-commit hook, not the enqueue call), and let a rolled-back unit leave no
+job behind. Delivery is at least once whatever the host does, so keep the
+notification id with the delivery row, never send one id twice as a new
+notification, and expect recipients to deduplicate on it (the SDK client
+sends it as `Idempotency-Key`).
 
 ## Transactions
 
 ### `UnitOfWork`
 
-`run(callable): mixed`. The server runs every mutating request through it,
-and `DataHolder` and `ActionRequests` run each of their operations through
-it, so everything an operation writes (a revision, the request, rejected
-siblings, queued notifications) stands or falls together. Bind your database
-transaction here; nested calls join the outer unit (use a depth counter or
-savepoints). The default runs the work directly.
+`run(callable): mixed`. **A host with persistent stores must bind its
+database transaction here.** The default, `IdentityUnitOfWork`, runs the work
+directly, which is right only for the in-memory stores; with anything else a
+failed operation leaves behind what it had already written, and `Services`
+logs a warning when it sees that combination. The server runs every mutating
+request through the unit, and `DataHolder` and `ActionRequests` run each of
+their operations through it, so everything an operation writes (a revision,
+the request, rejected siblings, grants, queued notifications) stands or falls
+together. Nested calls join the outer unit (use a depth counter or
+savepoints). Independently of the unit, every decision on an action request
+is a compare-and-set on its status that happens before any side effect, so a
+decision that lost a race writes nothing even without a transaction.
 
 ## Identifiers
 
@@ -129,6 +143,11 @@ own should truncate the same way. It raises
 `LogisticsObjectCreated`, `LogisticsObjectRevised`, `LogisticsEventReceived`,
 `ActionRequestCreated`, `ActionRequestStatusChanged` and
 `NotificationReceived`; a wrapper maps them to its own event system.
+
+Listeners run inside the unit of work, after the writes and before the
+notification fan-out: a listener that throws fails the operation and rolls
+it back with everything else. Listeners that do I/O of their own should
+queue it for after the commit rather than perform it in place.
 
 ## Wiring
 

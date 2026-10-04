@@ -34,39 +34,39 @@ use LambdaTwelve\OneRecord\Vocabulary\Generated\Cargo;
  */
 trait ActionRequestStoreContractTests
 {
-    protected const string OBJECT = 'https://1r.example.com/logistics-objects/p1';
-    protected const string OTHER = 'https://1r.example.com/logistics-objects/p2';
-    protected const string PARTNER = 'https://1r.partner.example/logistics-objects/partner';
-    protected const string HOLDER = 'https://1r.example.com/logistics-objects/holder';
+    protected const string CONTRACT_OBJECT = 'https://1r.example.com/logistics-objects/p1';
+    protected const string CONTRACT_OTHER = 'https://1r.example.com/logistics-objects/p2';
+    protected const string CONTRACT_PARTNER = 'https://1r.partner.example/logistics-objects/partner';
+    protected const string CONTRACT_HOLDER = 'https://1r.example.com/logistics-objects/holder';
 
     abstract protected function createStore(): ActionRequestStore;
 
-    protected function change(string $id, string $at, int $revision = 1, string $object = self::OBJECT): ActionRequest
+    protected function change(string $id, string $at, int $revision = 1, string $object = self::CONTRACT_OBJECT): ActionRequest
     {
         $change = new Change(new Iri($object), $revision, [Operation::add(new Iri($object), new Iri(Cargo::goodsDescription), new OperationObject(Literal::XSD_STRING, 'Books ' . $id))], 'Change ' . $id);
 
-        return ActionRequest::create(new Iri('https://1r.example.com/action-requests/' . $id), $change, new Iri(self::PARTNER), new DateTimeImmutable($at));
+        return ActionRequest::create(new Iri('https://1r.example.com/action-requests/' . $id), $change, new Iri(self::CONTRACT_PARTNER), new DateTimeImmutable($at));
     }
 
-    protected function subscription(string $id, string $at, string $topic = self::OBJECT, TopicType $type = TopicType::Identifier): ActionRequest
+    protected function subscription(string $id, string $at, string $topic = self::CONTRACT_OBJECT, TopicType $type = TopicType::Identifier): ActionRequest
     {
-        $subscription = new Subscription(new Iri(self::PARTNER), $type, $topic, [SubscriptionEventType::LogisticsObjectUpdated]);
+        $subscription = new Subscription(new Iri(self::CONTRACT_PARTNER), $type, $topic, [SubscriptionEventType::LogisticsObjectUpdated]);
 
-        return ActionRequest::create(new Iri('https://1r.example.com/action-requests/' . $id), $subscription, new Iri(self::PARTNER), new DateTimeImmutable($at));
+        return ActionRequest::create(new Iri('https://1r.example.com/action-requests/' . $id), $subscription, new Iri(self::CONTRACT_PARTNER), new DateTimeImmutable($at));
     }
 
-    protected function verification(string $id, string $at, string $object = self::OBJECT): ActionRequest
+    protected function verification(string $id, string $at, string $object = self::CONTRACT_OBJECT): ActionRequest
     {
         $verification = new Verification(new Iri($object), [Error::of('Weight missing', '422', 'No grossWeight.', Cargo::grossWeight)], 1);
 
-        return ActionRequest::create(new Iri('https://1r.example.com/action-requests/' . $id), $verification, new Iri(self::PARTNER), new DateTimeImmutable($at));
+        return ActionRequest::create(new Iri('https://1r.example.com/action-requests/' . $id), $verification, new Iri(self::CONTRACT_PARTNER), new DateTimeImmutable($at));
     }
 
-    protected function delegation(string $id, string $at, string $object = self::OBJECT): ActionRequest
+    protected function delegation(string $id, string $at, string $object = self::CONTRACT_OBJECT): ActionRequest
     {
-        $delegation = new AccessDelegation([Permission::GetLogisticsObject], [new Iri(self::PARTNER)], [new Iri($object)]);
+        $delegation = new AccessDelegation([Permission::GetLogisticsObject], [new Iri(self::CONTRACT_PARTNER)], [new Iri($object)]);
 
-        return ActionRequest::create(new Iri('https://1r.example.com/action-requests/' . $id), $delegation, new Iri(self::PARTNER), new DateTimeImmutable($at));
+        return ActionRequest::create(new Iri('https://1r.example.com/action-requests/' . $id), $delegation, new Iri(self::CONTRACT_PARTNER), new DateTimeImmutable($at));
     }
 
     /**
@@ -89,12 +89,12 @@ trait ActionRequestStoreContractTests
         self::assertNotNull($read);
         self::assertSame(RequestStatus::Pending, $read->status);
         self::assertSame(ActionRequestType::Change, $read->type);
-        self::assertSame(self::PARTNER, $read->requestedBy->value);
+        self::assertSame(self::CONTRACT_PARTNER, $read->requestedBy->value);
         self::assertSame('2026-10-02T12:00:00.000+00:00', $read->requestedAt->format(DATE_RFC3339_EXTENDED));
         self::assertInstanceOf(Change::class, $read->payload);
         self::assertSame('Change c1', $read->payload->description);
 
-        $accepted = $request->withStatus(RequestStatus::Accepted, new DateTimeImmutable('2026-10-02T12:05:00.000Z'), new Iri(self::HOLDER));
+        $accepted = $request->withStatus(RequestStatus::Accepted, new DateTimeImmutable('2026-10-02T12:05:00.000Z'), new Iri(self::CONTRACT_HOLDER));
         $store->save($accepted);
         $read = $store->get($request->iri);
         self::assertNotNull($read);
@@ -102,7 +102,7 @@ trait ActionRequestStoreContractTests
         self::assertSame('2026-10-02T12:05:00.000+00:00', $read->statusSince?->format(DATE_RFC3339_EXTENDED));
         self::assertCount(1, $read->history, 'the pending phase is history');
         self::assertSame(RequestStatus::Pending, $read->history[0]->status);
-        self::assertSame(self::HOLDER, $read->history[0]->changedBy?->value);
+        self::assertSame(self::CONTRACT_HOLDER, $read->history[0]->changedBy?->value);
 
         $failed = $accepted->withStatus(RequestStatus::Failed, new DateTimeImmutable('2026-10-02T12:06:00.000Z'), null, [Error::of('Conflict', '409', 'Stale revision.')]);
         $store->save($failed);
@@ -121,7 +121,7 @@ trait ActionRequestStoreContractTests
         }
         $subscription = $store->get(new Iri('https://1r.example.com/action-requests/s1'))?->payload;
         self::assertInstanceOf(Subscription::class, $subscription);
-        self::assertSame(self::OBJECT, $subscription->topic);
+        self::assertSame(self::CONTRACT_OBJECT, $subscription->topic);
         $verification = $store->get(new Iri('https://1r.example.com/action-requests/v1'))?->payload;
         self::assertInstanceOf(Verification::class, $verification);
         self::assertSame('Weight missing', $verification->errors[0]->title);
@@ -134,12 +134,12 @@ trait ActionRequestStoreContractTests
     {
         $store = $this->createStore();
         $store->save($this->change('c2', '2026-10-02T13:00:00Z'));
-        $store->save($this->change('c1', '2026-10-02T12:00:00Z')->withStatus(RequestStatus::Accepted, new DateTimeImmutable('2026-10-02T12:30:00Z'), new Iri(self::HOLDER)));
+        $store->save($this->change('c1', '2026-10-02T12:00:00Z')->withStatus(RequestStatus::Accepted, new DateTimeImmutable('2026-10-02T12:30:00Z'), new Iri(self::CONTRACT_HOLDER)));
         $store->save($this->verification('v1', '2026-10-02T14:00:00Z'));
         $store->save($this->subscription('s1', '2026-10-02T12:10:00Z'), );
         $store->save($this->delegation('d1', '2026-10-02T12:20:00Z'));
-        $store->save($this->change('other', '2026-10-02T12:00:00Z', 1, self::OTHER));
-        $object = new Iri(self::OBJECT);
+        $store->save($this->change('other', '2026-10-02T12:00:00Z', 1, self::CONTRACT_OTHER));
+        $object = new Iri(self::CONTRACT_OBJECT);
 
         self::assertSame(['c1', 'c2', 'v1'], self::ids($store->auditTrail($object, AuditTrailQuery::all())), 'changes and verifications about this object, by request time');
         self::assertSame(['c1'], self::ids($store->auditTrail($object, new AuditTrailQuery(status: RequestStatus::Accepted))));
@@ -152,15 +152,15 @@ trait ActionRequestStoreContractTests
     public function testPendingChangesAndAcceptedByType(): void
     {
         $store = $this->createStore();
-        $store->save($this->change('c1', '2026-10-02T12:00:00Z')->withStatus(RequestStatus::Accepted, new DateTimeImmutable('2026-10-02T12:30:00Z'), new Iri(self::HOLDER)));
+        $store->save($this->change('c1', '2026-10-02T12:00:00Z')->withStatus(RequestStatus::Accepted, new DateTimeImmutable('2026-10-02T12:30:00Z'), new Iri(self::CONTRACT_HOLDER)));
         $store->save($this->change('c2', '2026-10-02T13:00:00Z'));
         $store->save($this->change('c3', '2026-10-02T13:30:00Z'));
         $store->save($this->verification('v1', '2026-10-02T14:00:00Z'));
-        $store->save($this->subscription('s1', '2026-10-02T12:00:00Z')->withStatus(RequestStatus::Accepted, new DateTimeImmutable('2026-10-02T12:01:00Z'), new Iri(self::HOLDER)));
+        $store->save($this->subscription('s1', '2026-10-02T12:00:00Z')->withStatus(RequestStatus::Accepted, new DateTimeImmutable('2026-10-02T12:01:00Z'), new Iri(self::CONTRACT_HOLDER)));
         $store->save($this->subscription('s2', '2026-10-02T12:00:00Z'));
-        $store->save($this->delegation('d1', '2026-10-02T12:00:00Z')->withStatus(RequestStatus::Accepted, new DateTimeImmutable('2026-10-02T12:01:00Z'), new Iri(self::HOLDER)));
+        $store->save($this->delegation('d1', '2026-10-02T12:00:00Z')->withStatus(RequestStatus::Accepted, new DateTimeImmutable('2026-10-02T12:01:00Z'), new Iri(self::CONTRACT_HOLDER)));
 
-        self::assertSame(['c2', 'c3'], self::ids($store->pendingChanges(new Iri(self::OBJECT))), 'pending changes only, no verifications');
+        self::assertSame(['c2', 'c3'], self::ids($store->pendingChanges(new Iri(self::CONTRACT_OBJECT))), 'pending changes only, no verifications');
         self::assertSame(['s1'], self::ids($store->accepted(ActionRequestType::Subscription)));
         self::assertSame(['d1'], self::ids($store->accepted(ActionRequestType::AccessDelegation)));
         self::assertSame(['c1'], self::ids($store->accepted(ActionRequestType::Change)));
@@ -171,8 +171,8 @@ trait ActionRequestStoreContractTests
     {
         $store = $this->createStore();
         $pending = $this->change('c1', '2026-10-02T12:00:00Z');
-        $accepted = $pending->withStatus(RequestStatus::Accepted, new DateTimeImmutable('2026-10-02T12:05:00Z'), new Iri(self::HOLDER));
-        $revoked = $pending->withStatus(RequestStatus::Revoked, new DateTimeImmutable('2026-10-02T12:06:00Z'), new Iri(self::PARTNER));
+        $accepted = $pending->withStatus(RequestStatus::Accepted, new DateTimeImmutable('2026-10-02T12:05:00Z'), new Iri(self::CONTRACT_HOLDER));
+        $revoked = $pending->withStatus(RequestStatus::Revoked, new DateTimeImmutable('2026-10-02T12:06:00Z'), new Iri(self::CONTRACT_PARTNER));
 
         try {
             $store->transition($accepted, RequestStatus::Pending);
