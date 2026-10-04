@@ -92,6 +92,16 @@ subset, action requests, notifications, spec coverage per endpoint, the NE:ONE
 interoperability results and every open specification question:
 <https://lambda-twelve.github.io/one-record/>.
 
+## Maintained by Lambda Twelve
+
+Developed and maintained by [Lambda Twelve](https://www.lambda-twelve.com/),
+an independent software engineering company based in the EU. We build and
+operate logistics and air-cargo systems, and we publish the infrastructure
+they need as open source: this SDK, its Laravel and Drupal integrations, and
+the specification questions and interoperability findings they produce, which
+we file upstream with IATA. Issues and pull requests are welcome; see
+`CONTRIBUTING.md`, and `SECURITY.md` for reporting vulnerabilities privately.
+
 ## Licence
 
 Apache-2.0. The ONE Record specification and ontologies are IATA's, licensed
