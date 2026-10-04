@@ -12,6 +12,10 @@ it. From 1.0.0 on, breaking changes need a new major version.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [1.0.0-beta4] - 2026-10-04
+
 ### Added
 
 - `Spi\Volatile`, a marker for stores with nothing to roll back; the
