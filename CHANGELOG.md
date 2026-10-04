@@ -12,6 +12,10 @@ it. From 1.0.0 on, breaking changes need a new major version.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [1.0.0-beta5] - 2026-10-04
+
 ### Added
 
 - `Client\TokenEndpointException` (extends `ClientException`) with the status
