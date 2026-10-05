@@ -79,6 +79,39 @@ final class JwksKeyResolver implements KeyResolver
     }
 
     /**
+     * Why a JWK is not used to verify tokens, or null when it is: only keys the issuer publishes for
+     * signature verification are taken, RSA, `use` absent or "sig", `alg` absent or "RS256", `key_ops`
+     * absent or a list of distinct operation strings including "verify" (RFC 7517 sections 4.2 to 4.4).
+     * A member that is present but malformed, null included, fails closed: a key published for
+     * encryption only never verifies a token, whichever member says so (D14-001, R15-001).
+     *
+     * @param array<array-key, mixed> $jwk
+     */
+    private static function unusable(array $jwk): ?string
+    {
+        if (($jwk['kty'] ?? null) !== 'RSA') {
+            return 'not an RSA key';
+        }
+        if (\array_key_exists('use', $jwk) && $jwk['use'] !== 'sig') {
+            return 'use is not sig';
+        }
+        if (\array_key_exists('alg', $jwk) && $jwk['alg'] !== 'RS256') {
+            return 'alg is not RS256';
+        }
+        if (\array_key_exists('key_ops', $jwk)) {
+            $ops = $jwk['key_ops'];
+            if (!\is_array($ops) || !array_is_list($ops) || $ops !== array_values(array_unique(array_filter($ops, 'is_string')))) {
+                return 'key_ops is not a list of distinct operation names';
+            }
+            if (!\in_array('verify', $ops, true)) {
+                return 'key_ops does not include verify';
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * @return array<string, string> kid (or ordinal) => PEM
      */
     private function load(string $issuer, bool $refresh): array
@@ -115,13 +148,12 @@ final class JwksKeyResolver implements KeyResolver
         $keys = [];
         if (\is_array($document) && \is_array($document['keys'] ?? null)) {
             foreach ($document['keys'] as $index => $jwk) {
-                // Only keys the issuer publishes for signature verification: RSA, `use` absent or sig, `alg`
-                // absent or RS256, `key_ops` absent or listing verify (RFC 7517 sections 4.2 and 4.3). A key
-                // published for encryption only never verifies a token, whichever member says so (D14-001).
-                if (!\is_array($jwk) || ($jwk['kty'] ?? null) !== 'RSA' || (($jwk['use'] ?? 'sig') !== 'sig') || (isset($jwk['alg']) && $jwk['alg'] !== 'RS256')) {
+                if (!\is_array($jwk)) {
                     continue;
                 }
-                if (isset($jwk['key_ops']) && (!\is_array($jwk['key_ops']) || !\in_array('verify', $jwk['key_ops'], true))) {
+                $reason = self::unusable($jwk);
+                if ($reason !== null) {
+                    $this->logger->info('JWKS key skipped', ['issuer' => $issuer, 'kid' => \is_string($jwk['kid'] ?? null) ? $jwk['kid'] : null, 'reason' => $reason]);
                     continue;
                 }
                 try {

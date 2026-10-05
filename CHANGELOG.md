@@ -72,7 +72,10 @@ it. From 1.0.0 on, breaking changes need a new major version.
   with a space became a 500 (R14-004); every malformed `@id` is a 400.
 - `JwksKeyResolver` ignored `key_ops`; a key published for encryption only
   could verify tokens (D14-001). A present `key_ops` must include `verify`,
-  and the selection policy is in the guide.
+  and the selection policy is in the guide. A `key_ops`, `use` or `alg`
+  member that is present but malformed, `null` included, now fails closed
+  as the guide says, and a skipped key is logged with its reason (R15-001,
+  D15-001).
 
 ## [1.0.0-beta6] - 2026-10-04
 

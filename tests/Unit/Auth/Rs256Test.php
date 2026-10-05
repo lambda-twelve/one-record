@@ -22,6 +22,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use Stringable;
 
 #[CoversClass(Rs256Signer::class)]
 #[CoversClass(Rs256Verifier::class)]
@@ -319,18 +320,30 @@ final class Rs256Test extends TestCase
         $signer = $this->signer('default', 'k1');
         $token = $signer->sign([], 60);
         // One document per policy case, each holding the single key the token was signed with.
-        $verifierFor = static function (array $extra) use ($signer): Rs256Verifier {
+        $logger = new class extends \Psr\Log\AbstractLogger {
+            /** @var list<string> */
+            public array $reasons = [];
+
+            public function log($level, string|Stringable $message, array $context = []): void
+            {
+                $reason = $context['reason'] ?? '-';
+                $this->reasons[] = \sprintf('%s: %s (%s)', \is_scalar($level) ? (string) $level : 'level', $message, \is_string($reason) ? $reason : '-');
+            }
+        };
+        $verifierFor = static function (array $extra) use ($signer, $logger): Rs256Verifier {
             $http = new FakeHttpClient();
             foreach (range(1, 3) as $_) {
                 $http->queue(new \Nyholm\Psr7\Response(200, ['Content-Type' => 'application/json'], json_encode(['keys' => [$extra + $signer->publicJwk()]], JSON_THROW_ON_ERROR)));
             }
 
-            return new Rs256Verifier(new JwksKeyResolver([self::ISSUER => null], $http, new Psr17Factory(), new ArrayCache()), new FixedClock());
+            return new Rs256Verifier(new JwksKeyResolver([self::ISSUER => null], $http, new Psr17Factory(), new ArrayCache(), 600, $logger), new FixedClock());
         };
 
         self::assertSame(self::ISSUER, $verifierFor([])->verify($token)->issuer(), 'absent key_ops: the documented policy');
         self::assertSame(self::ISSUER, $verifierFor(['key_ops' => ['verify', 'sign']])->verify($token)->issuer(), 'key_ops listing verify');
-        foreach ([['key_ops' => ['encrypt']], ['key_ops' => []], ['key_ops' => 'verify']] as $extra) {
+        self::assertSame(self::ISSUER, $verifierFor(['use' => 'sig', 'alg' => 'RS256'])->verify($token)->issuer(), 'the other two members, well formed');
+        // Present but malformed fails closed, null included (R15-001); so do the other two members.
+        foreach ([['key_ops' => ['encrypt']], ['key_ops' => []], ['key_ops' => 'verify'], ['key_ops' => null], ['key_ops' => ['operation' => 'verify']], ['key_ops' => ['verify', 42]], ['key_ops' => ['verify', 'verify']], ['use' => null], ['alg' => null], ['alg' => 'RS512']] as $extra) {
             try {
                 $verifierFor($extra)->verify($token);
                 self::fail('a key not published for verification must not verify a token (D14-001): ' . json_encode($extra, JSON_THROW_ON_ERROR));
@@ -338,6 +351,10 @@ final class Rs256Test extends TestCase
                 // expected
             }
         }
+        self::assertNotEmpty($logger->reasons, 'a skipped key is logged with its reason (D15-001)');
+        self::assertStringContainsString('info: JWKS key skipped (key_ops does not include verify)', $logger->reasons[0]);
+        self::assertStringContainsString('(key_ops is not a list of distinct operation names)', implode("\n", $logger->reasons));
+        self::assertStringContainsString('(alg is not RS256)', implode("\n", $logger->reasons));
     }
 
     public function testJwksResolverSurvivesTransportFailures(): void
