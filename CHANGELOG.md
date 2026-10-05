@@ -12,6 +12,8 @@ it. From 1.0.0 on, breaking changes need a new major version.
 
 ## [Unreleased]
 
+## [1.0.0-beta7] - 2026-10-05
+
 ### Added
 
 - `Model\GraphValidator`: one validator for a whole logistics-object or
