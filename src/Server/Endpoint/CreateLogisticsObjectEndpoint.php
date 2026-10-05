@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace LambdaTwelve\OneRecord\Server\Endpoint;
 
+use InvalidArgumentException;
 use LambdaTwelve\OneRecord\JsonLd\JsonLdException;
 use LambdaTwelve\OneRecord\Model\LogisticsObject;
 use LambdaTwelve\OneRecord\Model\ModelException;
@@ -35,17 +36,27 @@ final class CreateLogisticsObjectEndpoint extends AbstractEndpoint
             throw HttpException::badRequest('The body must not contain @graph; a single logistics object is expected.', '@graph');
         }
 
-        $declared = $json['@id'] ?? null;
         $iri = null;
-        if (\is_string($declared) && $declared !== '') {
-            $relative = $this->services->config->relativePath(new \LambdaTwelve\OneRecord\Rdf\Iri(trim($declared)));
+        if (\array_key_exists('@id', $json)) {
+            // A present @id is honoured or refused, never silently replaced: a number, a list or an empty or
+            // malformed string is the client's mistake, not an omission (R14-004).
+            $declared = $json['@id'];
+            $message = 'An @id must be a logistics object URI under this server, or be left out so the server assigns one.';
+            if (!\is_string($declared) || trim($declared) === '') {
+                throw HttpException::badRequest($message, '@id');
+            }
+            try {
+                $relative = $this->services->config->relativePath(new \LambdaTwelve\OneRecord\Rdf\Iri(trim($declared)));
+            } catch (InvalidArgumentException) {
+                throw HttpException::badRequest($message, '@id');
+            }
             if ($relative === null || preg_match('#^logistics-objects/[^/?]+$#', $relative) !== 1) {
-                throw HttpException::badRequest('An @id must be a logistics object URI under this server, or be left out so the server assigns one.', '@id');
+                throw HttpException::badRequest($message, '@id');
             }
             $iri = $this->services->config->logisticsObjectIri(substr($relative, \strlen('logistics-objects/')));
+            unset($json['@id']);
         }
         $iri ??= $this->services->config->logisticsObjectIri($this->services->ids->next());
-        unset($json['@id']);
 
         try {
             $object = LogisticsObject::fromJsonLd($json, $iri)->withEmbeddedIds($this->services->embeddedIds);

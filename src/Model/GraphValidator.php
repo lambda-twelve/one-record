@@ -98,7 +98,9 @@ final class GraphValidator
                 if ($info->kind === PropertyKind::Datatype) {
                     if (!$object instanceof Literal) {
                         $violations[] = new GraphViolation(\sprintf('%s takes a literal value.', $predicate), $predicate, $subjectName);
-                    } elseif ($object->language === null && !Xsd::satisfies($object->datatype, $info->ranges)) {
+                    } elseif ($object->language !== null ? !self::acceptsText($info->ranges) : !Xsd::satisfies($object->datatype, $info->ranges)) {
+                        // A language-tagged literal is rdf:langString, text in a language: it fits a string range
+                        // and nothing else, so a tag cannot smuggle "many" into an integer property (R14-002).
                         $violations[] = new GraphViolation(\sprintf('%s expects %s, got %s.', $predicate, implode(' or ', $info->ranges), $object->datatype), $predicate, $subjectName);
                     } elseif (!Xsd::lexicallyValid($object)) {
                         $violations[] = new GraphViolation(\sprintf('"%s" is not a valid %s.', $object->lexical, $object->datatype), $predicate, $subjectName);
@@ -127,6 +129,23 @@ final class GraphValidator
         }
 
         return $violations;
+    }
+
+    /**
+     * @param list<string> $ranges
+     */
+    private static function acceptsText(array $ranges): bool
+    {
+        if ($ranges === []) {
+            return true;
+        }
+        foreach ([Literal::XSD_STRING, Literal::RDF_LANG_STRING, 'http://www.w3.org/2000/01/rdf-schema#Literal', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral'] as $text) {
+            if (\in_array($text, $ranges, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function isKnownClass(string $iri): bool

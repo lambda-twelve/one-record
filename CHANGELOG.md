@@ -58,6 +58,21 @@ it. From 1.0.0 on, breaking changes need a new major version.
   so a unit typed with the wrong list, or a code list where a class was
   expected, passed (R13-001). It counts now, and an untyped member IRI of
   the wrong list is caught by its IRI when the property expects a list.
+- A nested logistics object that creation had accepted (spec question 33)
+  made every later change to the object fail, since the change applier
+  judged the finished graph without that allowance (R14-001). It is allowed
+  there now; a change still cannot introduce one, and the type of any node,
+  embedded nodes included, can no longer be changed through a change.
+- A language-tagged literal skipped the datatype range check, so `"many"@en`
+  entered an integer property (R14-002). Tagged text now fits a string range
+  and nothing else.
+- The bulk event route dropped a malformed `cargo:eventFor` value and
+  reported no failure (R14-003); it answers 400 like the single-object route.
+- A non-string or empty `@id` on creation was treated as absent and a URI
+  with a space became a 500 (R14-004); every malformed `@id` is a 400.
+- `JwksKeyResolver` ignored `key_ops`; a key published for encryption only
+  could verify tokens (D14-001). A present `key_ops` must include `verify`,
+  and the selection policy is in the guide.
 
 ## [1.0.0-beta6] - 2026-10-04
 

@@ -47,11 +47,14 @@ final class BulkLogisticsEventsEndpoint extends AbstractEndpoint
         } catch (JsonLdException $e) {
             throw HttpException::badRequest($e->getMessage(), null, 'Invalid body request');
         }
+        // Every target is judged before any is chosen: a malformed one is a client error, as on the
+        // single-object route, not something to drop quietly from the multi-status answer (R14-003).
         $targetIris = [];
-        foreach ($expanded->graph->objects($expanded->root, Cargo::eventFor) as $target) {
-            if ($target instanceof Iri) {
-                $targetIris[$target->value] = $target;
+        foreach ($expanded->graph->objects($expanded->root, Cargo::eventFor) as $candidate) {
+            if (!$candidate instanceof Iri) {
+                throw HttpException::badRequest('cargo:eventFor must reference logistics objects by their URI.', Cargo::eventFor, 'Invalid resource');
             }
+            $targetIris[$candidate->value] = $candidate;
         }
         if ($targetIris === []) {
             throw HttpException::badRequest('cargo:eventFor must list the logistics objects the event is for.', Cargo::eventFor, 'Invalid resource');

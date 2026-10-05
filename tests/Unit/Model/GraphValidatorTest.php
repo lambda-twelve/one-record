@@ -178,4 +178,17 @@ final class GraphValidatorTest extends TestCase
         $event = new Graph([new Triple($e, new Iri(Graph::RDF_TYPE), new Iri(Cargo::LogisticsEvent)), new Triple($e, new Iri(Cargo::eventCode), new Iri('https://onerecord.iata.org/ns/code-lists/StatusCode#DEP'))]);
         self::assertSame([], array_map(static fn(GraphViolation $v): string => $v->message, (new GraphValidator(Vocabulary::default()))->validate($event, $e)));
     }
+
+    public function testR14002ALanguageTagIsTextAndFitsOnlyATextRange(): void
+    {
+        $u = new Iri('https://1r.example.com/logistics-objects/uld-1');
+        $uld = static fn(Literal $doors): Graph => new Graph([new Triple($u, new Iri(Graph::RDF_TYPE), new Iri(Cargo::ULD)), new Triple($u, new Iri(Cargo::numberOfDoors), $doors)]);
+        $messages = static fn(Graph $g): array => array_map(static fn(GraphViolation $v): string => $v->message, (new GraphValidator(Vocabulary::default()))->validate($g, $u));
+
+        self::assertSame([Cargo::numberOfDoors . ' expects http://www.w3.org/2001/XMLSchema#integer, got ' . Literal::RDF_LANG_STRING . '.'], $messages($uld(new Literal('many', null, 'en'))), 'the reviewer\'s probe');
+        self::assertSame([Cargo::numberOfDoors . ' expects http://www.w3.org/2001/XMLSchema#integer, got http://www.w3.org/2001/XMLSchema#string.'], $messages($uld(Literal::string('many'))));
+        self::assertSame([], $messages($uld(Literal::integer(2))));
+        // Localised text on a text property is what the tag is for.
+        self::assertSame([], self::messages(new Graph([...self::piece(), new Triple(new Iri(self::PIECE), new Iri(Cargo::goodsDescription), new Literal('Bücher', null, 'de'))])));
+    }
 }

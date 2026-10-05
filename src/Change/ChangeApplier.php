@@ -62,8 +62,11 @@ final class ChangeApplier
             if ($operation->predicate->value === Cargo::events) {
                 $errors[] = Error::of('Invalid resource', '400', 'Logistics events cannot be changed through a Change; post them to /logistics-events.', Cargo::events, $current->iri->value);
             }
-            if ($operation->predicate->value === Graph::RDF_TYPE && $operation->subject->equals($current->iri)) {
-                $errors[] = Error::of('Invalid resource', '400', 'The type of a logistics object cannot be changed.', Graph::RDF_TYPE, $current->iri->value);
+            if ($operation->predicate->value === Graph::RDF_TYPE) {
+                // The root's class is its identity; an embedded node's class arrives with the operation that
+                // creates it (example C2). Changing either afterwards is the one way a change could turn an
+                // embedded node into a logistics object, so neither is allowed.
+                $errors[] = Error::of('Invalid resource', '400', 'The type of an object is set when it is created and cannot be changed.', Graph::RDF_TYPE, $operation->subject instanceof Iri ? $operation->subject->value : $operation->subject->toNTriples());
             }
             if (str_starts_with($operation->predicate->value, \LambdaTwelve\OneRecord\Spec\Namespaces::API)) {
                 // Revision counters and anything else in the API namespace are the server's to write (R2-006).
@@ -282,7 +285,10 @@ final class ChangeApplier
     private function validateGraph(Graph $graph, Iri $root, array $minted, array &$errors): void
     {
         // The two revision properties are metadata a stored object may legitimately carry; no other API term is.
-        foreach ((new GraphValidator($this->vocabulary))->validate($graph, $root, [Api::hasRevision, Api::hasLatestRevision]) as $violation) {
+        // A nested logistics object that creation accepted (spec question 33) must survive unrelated changes
+        // (R14-001); a change cannot introduce one, since add() refuses the class on a new node and rdf:type
+        // cannot be changed, so the finished graph is judged with such nodes allowed.
+        foreach ((new GraphValidator($this->vocabulary))->validate($graph, $root, [Api::hasRevision, Api::hasLatestRevision], nestedLogisticsObjects: true) as $violation) {
             $errors[] = Error::of('Invalid resource', '400', $violation->message, $violation->property, $violation->subject);
         }
     }

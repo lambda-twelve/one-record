@@ -115,7 +115,13 @@ final class JwksKeyResolver implements KeyResolver
         $keys = [];
         if (\is_array($document) && \is_array($document['keys'] ?? null)) {
             foreach ($document['keys'] as $index => $jwk) {
+                // Only keys the issuer publishes for signature verification: RSA, `use` absent or sig, `alg`
+                // absent or RS256, `key_ops` absent or listing verify (RFC 7517 sections 4.2 and 4.3). A key
+                // published for encryption only never verifies a token, whichever member says so (D14-001).
                 if (!\is_array($jwk) || ($jwk['kty'] ?? null) !== 'RSA' || (($jwk['use'] ?? 'sig') !== 'sig') || (isset($jwk['alg']) && $jwk['alg'] !== 'RS256')) {
+                    continue;
+                }
+                if (isset($jwk['key_ops']) && (!\is_array($jwk['key_ops']) || !\in_array('verify', $jwk['key_ops'], true))) {
                     continue;
                 }
                 try {

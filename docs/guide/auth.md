@@ -33,7 +33,10 @@ Two resolvers ship:
   URL or `{issuer}/.well-known/jwks.json`) through any PSR-18 client, caches
   it in any PSR-16 cache, and refreshes once when a token names an unknown
   key id, so key rotation needs no restart. Untrusted issuers are never
-  fetched.
+  fetched. Of the keys a document lists, only those published for signature
+  verification are used: `kty` RSA, `use` absent or `sig`, `alg` absent or
+  `RS256`, `key_ops` absent or including `verify`. Everything else, an
+  encryption key or a malformed entry, is skipped and logged.
 
 `Auth\JwtAuthenticator` plugs the verifier into the server's `Authenticator`
 SPI: a valid token with a valid `logistics_agent_uri` becomes an `Agent`;
